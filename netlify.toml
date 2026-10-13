@@ -1,0 +1,7 @@
+# Site estático em public/ + a API em netlify/functions/api.mjs (rota /api/*).
+[build]
+  publish = "public"
+  command = ""
+
+[functions]
+  node_bundler = "esbuild"

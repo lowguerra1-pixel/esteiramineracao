@@ -1,4 +1,5 @@
-window.LISTAS={
+// Listas da Kaian Digital: formatos (planilha Formatos) e ângulos (Biblioteca de Ângulos, Renan Matheus).
+export default {
  "formatos": [
   "UGC",
   "Depoimento real",

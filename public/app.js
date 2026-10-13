@@ -1,6 +1,6 @@
 import { transcrever, webgpu } from '/transcribe.js';
 
-const L = window.LISTAS;
+import L from '/listas.mjs';
 const GANCHO_CATS = ['Problema', 'Solução', 'Produto', 'Oferta', 'Genérico'];
 const ANG_CATS = Object.keys(L.angulos);
 const AVATARES = ['Autoridade', 'Sonho', 'Espelho', 'Fundador', 'Operador define'];
@@ -123,9 +123,7 @@ async function refreshStats() {
 
 function tickClock() {
   const el = $('#clock'); if (!el || !S.stats) return;
-  const [h, m] = S.stats.horarioLimite.split(':').map(Number);
-  const lim = new Date(); lim.setHours(h, m, 0, 0);
-  const diff = Math.round((lim - new Date()) / 60000);
+  const diff = Math.round((S.stats.limiteEpoch - Date.now()) / 60000);
   const t = `${Math.floor(Math.abs(diff) / 60)}h${String(Math.abs(diff) % 60).padStart(2, '0')}`;
   el.className = 'clock' + (diff < 0 ? ' late' : '');
   el.innerHTML = diff >= 0 ? `Faltam <b>${t}</b> para as ${S.stats.horarioLimite}` : `Prazo das ${S.stats.horarioLimite} passou há <b>${t}</b>`;
@@ -134,12 +132,13 @@ setInterval(tickClock, 30000);
 
 function route() {
   if (!S.user) return;
-  const [, r = 'novo', arg] = location.hash.split('/');
+  const [, rota = 'novo', arg] = location.hash.split('/');
+  const [r, qs] = rota.split('?');
   $$('.nav a').forEach((a) => a.classList.toggle('active', a.dataset.r === r));
   closeDrawer();
   if (r === 'swipe') return pageSwipe(arg);
   if (r === 'painel') return pagePainel();
-  if (r === 'ajustes' && S.user.papel === 'admin') return pageAjustes();
+  if (r === 'ajustes' && S.user.papel === 'admin') return pageAjustes(new URLSearchParams(qs || '').get('drive'));
   return pageNovo();
 }
 window.addEventListener('hashchange', route);
@@ -147,7 +146,7 @@ window.addEventListener('hashchange', route);
 // ---------------------------------------------------------------- novo criativo
 function pageNovo() {
   $('#main').innerHTML = `
-  ${S.modoDemo ? `<div class="banner">Modo demonstração: a dissecação devolve uma ficha de exemplo. ${S.user.papel === 'admin' ? 'Cole a chave da API em <a href="#/ajustes">Ajustes</a> para dissecar de verdade.' : 'Peça ao Kaian para ligar a IA.'}</div>` : ''}
+  ${S.modoDemo ? `<div class="banner">Modo demonstração: a dissecação devolve uma ficha de exemplo. ${S.user.papel === 'admin' ? 'Veja em <a href="#/ajustes">Ajustes</a> como ligar a IA.' : 'Peça ao Kaian para ligar a IA.'}</div>` : ''}
   <div class="head">
     <div><h1>Novo criativo</h1><div class="muted">Do vídeo baixado até a linha no Swipe, em quatro passos.</div></div>
     <div class="legend"><span class="ia"><i></i>A IA preenche, você revisa</span><span class="op"><i></i>Você preenche</span></div>
@@ -263,6 +262,7 @@ function renderP3() {
     $('#dissecar').disabled = true; $('#dstatus').textContent = 'Dissecando…';
     try {
       const r = await api('/api/dissecar', { method: 'POST', body: { transcricao: F.transcricao } });
+      if (r.erro) throw new Error(r.erro);
       if (r.transcricao_limpa) F.transcricao = r.transcricao_limpa;
       F.ficha = r; renderP2(); renderP3(); renderP4(); updateFalta();
     } catch (e) { $('#dissecar').disabled = false; $('#dstatus').textContent = e.message; }
@@ -387,22 +387,34 @@ function updateFalta() {
   });
 }
 
-function uploadVideo(id, file, onPct) {
+// O vídeo vai direto do navegador para o Google Drive (sessão de upload criada pela API).
+function putArquivo(url, file, onPct) {
   return new Promise((resolve, reject) => {
     const x = new XMLHttpRequest();
-    x.open('PUT', `/api/criativos/${id}/video`);
-    x.setRequestHeader('authorization', 'Bearer ' + S.token);
-    x.setRequestHeader('x-filename', encodeURIComponent(file.name));
+    x.open('PUT', url);
+    x.setRequestHeader('content-type', file.type || 'video/mp4');
     x.upload.onprogress = (e) => e.lengthComputable && onPct(Math.round((e.loaded / e.total) * 100));
-    x.onload = () => (x.status < 300 ? resolve(JSON.parse(x.responseText)) : reject(new Error('Falha ao enviar o vídeo.')));
-    x.onerror = () => reject(new Error('Falha ao enviar o vídeo.'));
+    x.onload = () => {
+      if (x.status >= 300) return reject(new Error(`O Drive recusou o vídeo (${x.status}).`));
+      let id = null; try { id = JSON.parse(x.responseText).id; } catch {}
+      resolve(id);
+    };
+    x.onerror = () => reject(new Error('A conexão caiu durante o envio do vídeo.'));
     x.send(file);
   });
+}
+async function uploadVideo(id, file, onPct) {
+  const s = await api(`/api/criativos/${id}/video-sessao`, { method: 'POST', body: { nome: file.name, tipo: file.type || 'video/mp4', tamanho: file.size } });
+  let fileId = null;
+  try { fileId = await putArquivo(s.uploadUrl, file, onPct); }
+  catch (e) { if (!/conexão/.test(e.message)) throw e; } // às vezes o Google conclui mas o navegador não lê a resposta; a API confere
+  return api(`/api/criativos/${id}/video-ok`, { method: 'POST', body: { fileId } });
 }
 
 async function salvar() {
   if (faltando().length) return;
   const btn = $('#salvar'); F.busy = true; btn.disabled = true; btn.textContent = 'Salvando…';
+  let c;
   try {
     const ficha = { ...F.ficha };
     delete ficha.demo;
@@ -411,19 +423,22 @@ async function salvar() {
       await api('/api/listas/item', { method: 'POST', body: { lista: 'formato', valor: F.formato } });
       S.listas = await api('/api/listas');
     }
-    const c = await api('/api/criativos', { method: 'POST', body: { nicho: F.nicho, faixa: F.faixa, anunciante: F.anunciante, linkBiblioteca: F.linkBiblioteca, formato: F.formato.trim(), hookVisual: F.hookVisual, retencao: F.retencao, impressoes: F.impressoes, ficha: { ...ficha, transcricao_limpa: F.transcricao } } });
-    await uploadVideo(c.id, F.file, (p) => (btn.textContent = `Enviando vídeo ${p}%`));
-    const nicho = F.nicho, faixa = F.faixa;
-    if (F.url) URL.revokeObjectURL(F.url);
-    F = novoForm(); F.nicho = nicho; F.faixa = faixa; // mantém nicho e faixa para o próximo
-    await refreshStats();
-    pageNovo();
-    window.scrollTo({ top: 0 });
-    toast(`${c.id} salvo no Swipe.`);
+    c = await api('/api/criativos', { method: 'POST', body: { nicho: F.nicho, faixa: F.faixa, anunciante: F.anunciante, linkBiblioteca: F.linkBiblioteca, formato: F.formato.trim(), hookVisual: F.hookVisual, retencao: F.retencao, impressoes: F.impressoes, ficha: { ...ficha, transcricao_limpa: F.transcricao } } });
   } catch (e) {
     F.busy = false; btn.disabled = false; btn.textContent = 'Salvar no Swipe';
-    toast(e.message, true);
+    return toast(e.message, true);
   }
+  let avisoVideo = '';
+  try { await uploadVideo(c.id, F.file, (p) => (btn.textContent = `Enviando vídeo ${p}%`)); }
+  catch (e) { avisoVideo = e.message; }
+  const nicho = F.nicho, faixa = F.faixa;
+  if (F.url) URL.revokeObjectURL(F.url);
+  F = novoForm(); F.nicho = nicho; F.faixa = faixa; // mantém nicho e faixa para o próximo
+  await refreshStats();
+  pageNovo();
+  window.scrollTo({ top: 0 });
+  if (avisoVideo) toast(`${c.id} salvo, mas o vídeo não subiu: ${avisoVideo} Abra o ${c.id} no Swipe para reenviar.`, true);
+  else toast(`${c.id} salvo no Swipe.`);
 }
 
 // ---------------------------------------------------------------- swipe
@@ -531,8 +546,9 @@ function openDrawer(id) {
     <header><h2>${c.id} <span class="muted" style="font-weight:400">· ${esc(c.nicho)} · ${esc(c.faixa)}</span></h2>
       <div class="row"><button class="btn ghost small" id="copiar">Copiar ficha</button><button class="btn small" id="fechar">Fechar</button></div></header>
     <div class="content">
-      ${c.video ? `<video src="/videos/${c.id}?t=${encodeURIComponent(S.token)}" controls playsinline preload="metadata"></video>` : '<div class="banner">O vídeo deste criativo não foi enviado.</div>'}
-      <div class="small muted">${esc(c.operadorNome)} · ${fmtData(c.data)} ${c.anunciante ? '· ' + esc(c.anunciante) : ''} · <a href="${esc(c.linkBiblioteca)}" target="_blank" rel="noopener">Abrir na Biblioteca</a>${c.video ? ` · arquivo: ${esc(c.video.nome)}` : ''}</div>
+      ${c.video?.driveId ? `<div class="player"><iframe src="https://drive.google.com/file/d/${esc(c.video.driveId)}/preview" allow="autoplay; fullscreen" allowfullscreen title="Vídeo ${c.id}"></iframe></div>`
+        : `<div class="banner">O vídeo deste criativo ainda não está no Drive.${pode ? ' <label class="linkbtn" style="cursor:pointer">Enviar agora<input type="file" accept="video/*" id="reenviar" class="hidden"></label>' : ''}</div>`}
+      <div class="small muted">${esc(c.operadorNome)} · ${fmtData(c.data)} ${c.anunciante ? '· ' + esc(c.anunciante) : ''} · <a href="${esc(c.linkBiblioteca)}" target="_blank" rel="noopener">Abrir na Biblioteca</a>${c.video?.link ? ` · <a href="${esc(c.video.link)}" target="_blank" rel="noopener">Abrir no Drive</a>` : ''}</div>
       <section class="panel ficha"><header><h2>Ficha</h2><span class="tag ia">IA, revisada</span></header><div class="body"><dl>
         <dt>Hook (literal)</dt><dd>"${esc(fi.hook_literal)}"</dd>
         <dt>Modelo do gancho</dt><dd><b>${esc(fi.modelo_gancho)}</b></dd>
@@ -572,6 +588,14 @@ function openDrawer(id) {
   $('#editar') && ($('#editar').onclick = () => leitura(true));
   const fechar = () => (location.hash = '#/swipe');
   $('#fechar').onclick = fechar; $('.drawer-bg').onclick = fechar;
+  $('#reenviar') && ($('#reenviar').onchange = async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    try {
+      toast('Enviando o vídeo…');
+      Object.assign(c, await uploadVideo(c.id, file, (p) => toast(`Enviando o vídeo… ${p}%`)));
+      toast('Vídeo enviado para o Drive.'); closeDrawer(); openDrawer(c.id);
+    } catch (err) { toast(err.message, true); }
+  });
   $('#copiar').onclick = async () => { await navigator.clipboard.writeText(fichaTexto(c)); toast('Ficha copiada.'); };
   wrap.onkeydown = (e) => e.key === 'Escape' && fechar();
   $('#fechar').focus();
@@ -613,36 +637,43 @@ async function pagePainel() {
 }
 
 // ---------------------------------------------------------------- ajustes
-async function pageAjustes() {
+async function pageAjustes(driveRet) {
   const c = await api('/api/config');
+  const item = (ok, txt) => `<li><span class="${ok ? 'ok' : 'no'}">${ok ? '✓' : '✗'}</span><span>${txt}</span></li>`;
   $('#main').innerHTML = `<div class="head"><div><h1>Ajustes</h1><div class="muted">Só o gestor vê esta página.</div></div></div>
-  <form id="cf" class="stack" style="max-width:720px">
-    <section class="panel"><header><h2>Dissecação com IA</h2><span class="tag ${c.temChave ? 'ia' : 'demo'}">${c.temChave ? 'Ligada' : 'Modo demo'}</span></header><div class="body stack">
-      <label class="f"><span>Chave da API da Anthropic <em>${c.temChave ? '(já salva; cole outra para trocar)' : ''}</em></span><input type="password" id="k" placeholder="sk-ant-…" autocomplete="off"></label>
-      <label class="f"><span>Modelo</span><input type="text" id="modelo" value="${esc(c.modelo)}"></label>
-      ${c.temChave ? '<label class="row small"><input type="checkbox" id="rm"> Remover a chave e voltar ao modo demo</label>' : ''}
+  ${driveRet === 'ok' ? '<div class="banner" style="background:#E5F4EC;color:#14532D;border-color:#B7E0C8">Google Drive conectado. Os próximos vídeos vão para a pasta "Esteira de Repertório" no seu Drive.</div>' : ''}
+  ${driveRet === 'erro' ? '<div class="banner">O Google não devolveu a autorização. Tente conectar de novo.</div>' : ''}
+  <div class="stack" style="max-width:760px">
+    <section class="panel"><header><h2>Conexões</h2></header><div class="body stack">
+      <ul class="checklist">
+        ${item(c.temChave, c.temChave ? 'Dissecação com IA ligada.' : 'Dissecação em modo demo. Cadastre <code>ANTHROPIC_API_KEY</code> nas variáveis da Netlify e faça um novo deploy.')}
+        ${item(c.googleConfigurado, c.googleConfigurado ? 'Credenciais do Google cadastradas na Netlify.' : 'Faltam <code>GOOGLE_CLIENT_ID</code> e <code>GOOGLE_CLIENT_SECRET</code> nas variáveis da Netlify.')}
+        ${item(c.driveConectado, c.driveConectado ? 'Google Drive conectado.' : 'Google Drive ainda não conectado.')}
+      </ul>
+      ${c.googleConfigurado ? `<div class="row"><a class="btn ${c.driveConectado ? 'ghost' : ''}" href="/api/google/conectar?t=${encodeURIComponent(S.token)}">${c.driveConectado ? 'Reconectar Google Drive' : 'Conectar Google Drive'}</a>
+        <span class="small muted">Use a conta do Google onde os vídeos devem ficar.</span></div>` : ''}
+      <div class="small muted">Endereço de retorno para cadastrar no Google Cloud: <code>${esc(c.redirectUri)}</code></div>
     </div></section>
-    <section class="panel"><header><h2>Vídeos</h2></header><div class="body stack">
-      <label class="f"><span>Pasta onde os vídeos são salvos</span><input type="text" id="pasta" value="${esc(c.pastaVideos)}"></label>
-      <div class="small muted">Aponte para uma pasta do Google Drive para o computador (ex.: <code>~/Meu Drive/Esteira/videos</code>) e cada vídeo sobe sozinho para o Drive, já com o ID no nome.</div>
-    </div></section>
-    <section class="panel"><header><h2>Meta e prazo</h2></header><div class="body grid2">
-      <label class="f"><span>Meta diária por pessoa</span><input type="number" id="meta" min="1" value="${c.metaDiaria}"></label>
-      <label class="f"><span>Horário limite</span><input type="text" id="hora" value="${esc(c.horarioLimite)}" placeholder="16:00"></label>
-    </div></section>
-    <section class="panel"><header><h2>PINs de acesso</h2></header><div class="body grid2">
-      ${c.usuarios.map((u) => `<label class="f"><span>${esc(u.nome)}</span><input type="text" data-pin="${u.id}" value="${esc(u.pin)}" inputmode="numeric"></label>`).join('')}
-    </div></section>
-    <div><button class="btn big">Salvar ajustes</button></div>
-  </form>`;
+    <form id="cf" class="stack">
+      <section class="panel"><header><h2>Meta e prazo</h2></header><div class="body grid2">
+        <label class="f"><span>Meta diária por pessoa</span><input type="number" id="meta" min="1" value="${c.metaDiaria}"></label>
+        <label class="f"><span>Horário limite</span><input type="text" id="hora" value="${esc(c.horarioLimite)}" placeholder="16:00"></label>
+        <label class="f"><span>Fuso horário da equipe</span><input type="text" id="fuso" value="${esc(c.fuso)}" placeholder="America/Sao_Paulo"></label>
+        <label class="f"><span>Modelo da IA</span><input type="text" id="modelo" value="${esc(c.modelo)}"></label>
+      </div></section>
+      <section class="panel"><header><h2>PINs de acesso</h2></header><div class="body grid2">
+        ${c.usuarios.map((u) => `<label class="f"><span>${esc(u.nome)}</span><input type="text" data-pin="${u.id}" value="${esc(u.pin)}" inputmode="numeric"></label>`).join('')}
+      </div></section>
+      <div><button class="btn big">Salvar ajustes</button></div>
+    </form>
+  </div>`;
   $('#cf').onsubmit = async (e) => {
     e.preventDefault();
     try {
       await api('/api/config', { method: 'POST', body: {
-        anthropicKey: $('#k').value, removerChave: $('#rm')?.checked, modelo: $('#modelo').value, pastaVideos: $('#pasta').value,
-        metaDiaria: $('#meta').value, horarioLimite: $('#hora').value, usuarios: $$('[data-pin]').map((i) => ({ id: i.dataset.pin, pin: i.value })),
+        modelo: $('#modelo').value, metaDiaria: $('#meta').value, horarioLimite: $('#hora').value, fuso: $('#fuso').value,
+        usuarios: $$('[data-pin]').map((i) => ({ id: i.dataset.pin, pin: i.value })),
       } });
-      const eu = await api('/api/eu'); S.modoDemo = eu.modoDemo;
       await refreshStats(); pageAjustes(); toast('Ajustes salvos.');
     } catch (err) { toast(err.message, true); }
   };
