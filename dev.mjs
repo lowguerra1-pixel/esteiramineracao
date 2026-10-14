@@ -29,7 +29,11 @@ http.createServer(async (req, res) => {
     if (r.body) for await (const chunk of r.body) res.write(chunk);
     return res.end();
   }
-  const file = path.join(PUBLIC, url.pathname === '/' ? 'index.html' : url.pathname);
+  let file = path.join(PUBLIC, decodeURIComponent(url.pathname));
+  if (file.startsWith(PUBLIC) && fs.existsSync(file) && fs.statSync(file).isDirectory()) {
+    if (!url.pathname.endsWith('/')) { res.writeHead(301, { location: url.pathname + '/' }); return res.end(); }
+    file = path.join(file, 'index.html');
+  }
   if (!file.startsWith(PUBLIC) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404); return res.end('Não encontrado'); }
   res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
   fs.createReadStream(file).pipe(res);

@@ -104,6 +104,7 @@ function shell() {
     <a href="#/painel" data-r="painel">Painel</a>
     ${admin ? '<a href="#/ajustes" data-r="ajustes">Ajustes</a>' : ''}
     <span class="grow"></span>
+    <a href="/ofertas/" class="outro-app">Ofertas →</a>
     <span class="who">${esc(S.user.nome)} <button class="linkbtn" id="sair">Sair</button></span>
   </nav>
   <main id="main"></main>`;

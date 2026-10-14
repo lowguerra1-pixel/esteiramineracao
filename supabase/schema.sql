@@ -65,3 +65,48 @@ on conflict do nothing;
 insert into esteira_config (chave, valor) values
   ('metaDiaria', '20'), ('horarioLimite', '"16:00"'), ('fuso', '"America/Sao_Paulo"'), ('modelo', '"claude-sonnet-5-5"')
 on conflict (chave) do nothing;
+
+-- ============================================================ Ofertas (Mineração e Modelagem)
+-- Uma ficha por oferta (OF-0001). A mesma ficha nasce na caixa e segue até a manutenção.
+
+create sequence if not exists esteira_oferta_numero_seq;
+
+create or replace function esteira_proxima_oferta() returns bigint
+language sql as $$ select nextval('esteira_oferta_numero_seq') $$;
+
+create table if not exists esteira_ofertas (
+  id text primary key,
+  numero bigint unique not null,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now(),
+  criado_por text references esteira_usuarios(id),
+  criado_por_nome text,
+  frase text not null,
+  notas text,
+  origem text not null,
+  link text,
+  mae_link text,
+  mae_id text,
+  nicho text,
+  ticket numeric,
+  anunciantes int,
+  classe text check (classe in ('A', 'B', 'C', 'D')),
+  score int,
+  status text not null default 'caixa',
+  monitorar_ate date,
+  motivo_descarte text,
+  teimosia boolean not null default false,
+  trilha text check (trilha in ('oferta_nova', 'mecanismo', 'lateralizacao')),
+  idioma text,
+  cacador jsonb,
+  etapas jsonb not null default '{}'::jsonb,
+  checklist jsonb not null default '{}'::jsonb,
+  teste jsonb,
+  funil jsonb,
+  escalou text check (escalou in ('sim', 'nao')),
+  historico jsonb not null default '[]'::jsonb
+);
+create index if not exists esteira_ofertas_status_idx on esteira_ofertas (status);
+create unique index if not exists esteira_ofertas_cacador_idx on esteira_ofertas ((cacador->>'chave')) where cacador is not null;
+
+alter table esteira_ofertas enable row level security;

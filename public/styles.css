@@ -229,3 +229,4 @@ td .sub { color: var(--muted); font-size: 12.5px; }
 .checklist .ok { color: var(--ok); font-weight: 700; }
 .checklist .no { color: var(--erro); font-weight: 700; }
 code { background: var(--line-soft); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+.nav a.outro-app { color: var(--blue); border-bottom: 0; }
