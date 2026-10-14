@@ -211,7 +211,8 @@ async function puxarCacador() {
     const r = await api('/api/ofertas/cacador/puxar', { method: 'POST' });
     [S.ofertas, S.cfg] = await Promise.all([api('/api/ofertas'), api('/api/ofertas/config')]);
     contadores(); pageCaixa();
-    toast(r.novas || r.descartadas ? `Caçador: ${r.novas} novas para triar e ${r.descartadas} descartadas por ele.` : 'Nada novo na planilha do Caçador.');
+    const partes = [r.novas && `${r.novas} novas para triar`, r.atualizadas && `${r.atualizadas} já existiam e foram atualizadas`, r.descartadas && `${r.descartadas} descartadas por ele`, r.mescladas && `${r.mescladas} duplicadas juntadas`].filter(Boolean);
+    toast(partes.length ? `Caçador: ${partes.join(', ')}.` : 'Nada novo na planilha do Caçador.');
   } catch (e) { b.disabled = false; b.textContent = 'Puxar Caçador'; toast(e.message, true); }
 }
 
