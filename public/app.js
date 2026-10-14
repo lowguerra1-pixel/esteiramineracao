@@ -94,7 +94,7 @@ function shell() {
   const admin = S.user.papel === 'admin';
   app().innerHTML = `
   <div class="top">
-    <div class="brand">Esteira<span>.</span></div>
+    <div class="brand"><a href="/" title="Voltar ao hub">Kaian Digital</a><span class="crumb">Esteira de Repertório</span></div>
     <div class="quota" id="quota"></div>
     <div class="clock" id="clock"></div>
   </div>
@@ -104,7 +104,6 @@ function shell() {
     <a href="#/painel" data-r="painel">Painel</a>
     ${admin ? '<a href="#/ajustes" data-r="ajustes">Ajustes</a>' : ''}
     <span class="grow"></span>
-    <a href="/ofertas/" class="outro-app">Ofertas →</a>
     <span class="who">${esc(S.user.nome)} <button class="linkbtn" id="sair">Sair</button></span>
   </nav>
   <main id="main"></main>`;

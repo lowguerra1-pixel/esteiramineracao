@@ -92,9 +92,9 @@ async function boot() {
 function shell() {
   $('#app').innerHTML = `
   <div class="top of">
-    <div class="brand">Ofertas<span>.</span></div>
+    <div class="brand"><a href="/" title="Voltar ao hub">Kaian Digital</a><span class="crumb">Ofertas</span></div>
     <div class="counters" id="counters"></div>
-    <a class="app-link" href="/">Esteira de Repertório →</a>
+    <span></span>
   </div>
   <nav class="nav">
     <a href="#/caixa" data-r="caixa">Mineração</a>
@@ -359,7 +359,7 @@ async function pageFicha(id) {
       <h1><span class="idt">${of.id}</span>${esc(of.frase)} <span class="st ${of.status}">${esc(STATUS[of.status])}</span></h1>
       <div class="muted">${of.trilha ? `${esc(nomeTrilha(of.trilha))}${of.idioma ? ` · ${esc(of.idioma)}` : ''} · ` : ''}${esc(of.origem)} · anotada por ${esc(of.criadoPorNome || '')} em ${fmtData(of.criadoEm)}</div>
     </div>
-    <div class="row">${of.link ? `<a class="btn ghost small" href="${esc(of.link)}" target="_blank" rel="noopener">Abrir link</a>` : ''}<button class="btn ghost small" id="editar">Editar dados</button></div>
+    <div class="row">${of.link ? `<a class="btn ghost small" href="${esc(of.link)}" target="_blank" rel="noopener">Abrir link</a>` : ''}<button class="btn ghost small" id="editar">Editar dados</button>${S.user.papel === 'admin' ? '<span id="delbox"><button class="btn danger small" id="excluir">Excluir</button></span>' : ''}</div>
   </div>
   <div class="fgrid">
     <div class="side">
@@ -378,6 +378,18 @@ async function pageFicha(id) {
   <section class="panel" style="margin-top:16px"><header><h2>Histórico</h2></header><div class="body"><ul class="hist">${[...of.historico].reverse().map((h) => `<li><time>${fmtDH(h.em)}</time><span>${esc(h.txt)} <span class="muted">· ${esc(h.por)}</span></span></li>`).join('')}</ul></div></section>`;
   renderDados(of, false);
   $('#editar').onclick = () => renderDados(of, true);
+  $('#excluir') && ($('#excluir').onclick = () => {
+    $('#delbox').innerHTML = '<span class="small" style="color:var(--erro)">Excluir de vez?</span> <button class="btn small" id="delsim" style="background:var(--erro);border-color:var(--erro)">Sim, excluir</button> <button class="btn ghost small" id="delnao">Cancelar</button>';
+    $('#delnao').onclick = () => pageFicha(of.id);
+    $('#delsim').onclick = async () => {
+      try {
+        await api(`/api/ofertas/${of.id}`, { method: 'DELETE' });
+        S.ofertas = S.ofertas.filter((o) => o.id !== of.id);
+        toast(`${of.id} excluída.`);
+        location.hash = FASES_MODELAGEM.includes(of.status) ? '#/modelagem' : '#/caixa';
+      } catch (e) { toast(e.message, true); }
+    };
+  });
   renderFase(of);
 }
 

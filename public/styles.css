@@ -229,4 +229,23 @@ td .sub { color: var(--muted); font-size: 12.5px; }
 .checklist .ok { color: var(--ok); font-weight: 700; }
 .checklist .no { color: var(--erro); font-weight: 700; }
 code { background: var(--line-soft); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
-.nav a.outro-app { color: var(--blue); border-bottom: 0; }
+
+/* ---------- refinamentos (hub e apps) ---------- */
+.top { padding: 14px 28px; }
+.brand { display: flex; align-items: baseline; gap: 10px; font-size: 15px; }
+.brand a { color: #8E9AA6; text-decoration: none; font-weight: 600; }
+.brand a:hover { color: #fff; }
+.brand .crumb { color: #fff; font-weight: 800; }
+.brand .crumb::before { content: '/'; color: #4A5663; font-weight: 400; margin-right: 10px; }
+.nav { padding: 0 28px; gap: 6px; }
+.nav a { padding: 13px 12px 11px; border-bottom-width: 2px; }
+.nav a:hover { color: var(--ink); }
+main { padding: 32px 28px 48px; }
+h1 { font-size: 28px; letter-spacing: -0.025em; }
+.head { margin-bottom: 24px; }
+.panel { border-color: #D5DBE1; border-radius: 10px; }
+.panel > header { padding: 15px 20px; }
+.panel > .body { padding: 20px; }
+.btn { border-radius: 8px; }
+.tablewrap { border-color: #D5DBE1; border-radius: 10px; }
+.login .lede { font-size: 15px; }

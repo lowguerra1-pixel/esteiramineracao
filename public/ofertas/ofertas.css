@@ -7,7 +7,7 @@
 .top a.app-link:hover { color: #fff; }
 
 /* captura rápida */
-.capture { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-bottom: 20px; }
+.capture { background: var(--card); border: 1px solid #D5DBE1; border-radius: 10px; padding: 16px; margin-bottom: 20px; }
 .capture .main { display: grid; grid-template-columns: 1fr 260px auto; gap: 8px; }
 .capture .frase { font-size: 17px; padding: 11px 12px; }
 .capture .more { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; }
@@ -22,7 +22,7 @@
 
 /* cartão de triagem */
 .cards { display: grid; gap: 10px; }
-.ocard { background: var(--card); border: 1px solid var(--line); border-radius: 8px; display: grid; grid-template-columns: 74px 1fr auto; gap: 16px; padding: 14px 16px; align-items: start; }
+.ocard { background: var(--card); border: 1px solid #D5DBE1; border-radius: 10px; display: grid; grid-template-columns: 74px 1fr auto; gap: 16px; padding: 14px 16px; align-items: start; }
 .ocard.due { border-color: var(--marca-ink); box-shadow: inset 4px 0 0 var(--marca); }
 .score { text-align: center; }
 .score .os { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
@@ -47,7 +47,7 @@
 .det dl { display: grid; grid-template-columns: 130px 1fr; gap: 4px 12px; margin: 8px 0 0; }
 .det dt { color: var(--muted); }
 .det dd { margin: 0; }
-.acts { display: grid; gap: 6px; width: 300px; }
+.acts { display: grid; gap: 6px; width: 340px; }
 .acts .row { flex-wrap: nowrap; }
 .acts select { padding: 6px 8px; font-size: 13.5px; }
 .acts .btn { white-space: nowrap; }
