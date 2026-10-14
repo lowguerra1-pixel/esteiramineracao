@@ -174,7 +174,7 @@ function renderP1() {
   p.innerHTML = `${stepHead(1, 'Vídeo e origem', okOrigem)}
   <div class="body stack">
     ${F.file ? `<video src="${F.url}" controls playsinline></video>
-      <div class="filemeta"><span>${esc(F.file.name)}</span><span>${fmtBytes(F.file.size)} · <button class="linkbtn" id="trocar">trocar</button></span></div>`
+      <div class="filemeta"><span title="${esc(F.file.name)}">${esc(F.file.name)}</span><span>${fmtBytes(F.file.size)} · <button class="linkbtn" id="trocar">trocar</button></span></div>`
     : `<div class="drop" id="drop" tabindex="0" role="button"><strong>Solte o vídeo aqui</strong><span class="muted small">ou clique para escolher (mp4, mov, webm)</span></div>`}
     <input type="file" id="file" accept="video/*" class="hidden">
     <label class="f"><span>Link do anúncio na Biblioteca</span><input type="url" id="link" placeholder="https://www.facebook.com/ads/library/?id=…" value="${esc(F.linkBiblioteca)}"></label>

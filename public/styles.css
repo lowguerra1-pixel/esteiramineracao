@@ -249,3 +249,10 @@ h1 { font-size: 28px; letter-spacing: -0.025em; }
 .btn { border-radius: 8px; }
 .tablewrap { border-color: #D5DBE1; border-radius: 10px; }
 .login .lede { font-size: 15px; }
+
+/* Nomes de arquivo longos (sem espaços) não podem alargar a coluna do vídeo e cobrir os outros passos. */
+.work > *, .stepstack > *, .panel, .panel > .body { min-width: 0; }
+.filemeta { gap: 12px; }
+.filemeta > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.filemeta > span:last-child { white-space: nowrap; }
+video { max-width: 100%; }
