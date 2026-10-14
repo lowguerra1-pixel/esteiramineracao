@@ -79,7 +79,7 @@ input[type=text], input[type=url], input[type=password], input[type=number], sel
 textarea { resize: vertical; min-height: 64px; }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.stack { display: grid; gap: 12px; }
+.stack { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; background: #fff; }
@@ -256,3 +256,7 @@ h1 { font-size: 28px; letter-spacing: -0.025em; }
 .filemeta > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .filemeta > span:last-child { white-space: nowrap; }
 video { max-width: 100%; }
+
+/* O vídeo sempre cabe na coluna dele, qualquer que seja o tamanho original (horizontal ou vertical). */
+#p1 { overflow: hidden; }
+#p1 video { display: block; width: 100%; max-width: 100%; height: auto; max-height: 480px; object-fit: contain; }
