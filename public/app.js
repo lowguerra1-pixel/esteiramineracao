@@ -12,11 +12,11 @@ const FAIXAS = [{ v: 'Core', s: '80%' }, { v: 'Adjacente', s: '10%' }, { v: 'Ale
 const S = {
   token: localStorage.getItem('esteira.token') || '',
   user: null, modoDemo: false, stats: null, listas: { nichos: [], formatosExtras: [] }, criativos: [],
-  filtros: { q: '', nicho: '', faixa: '', formato: '', cat: '', consc: '', op: '' },
+  filtros: { q: '', nicho: '', faixa: '', formato: '', cat: '', consc: '', op: '', dias: '' },
 };
 let F = novoForm();
 function novoForm() {
-  return { file: null, url: null, linkBiblioteca: '', anunciante: '', nicho: '', faixa: '', transcricao: '', ficha: null, formato: '', hookVisual: '', retencao: '', impressoes: '', avatarOp: '', busy: false };
+  return { file: null, url: null, linkBiblioteca: '', anunciante: '', diasAtivos: '', nicho: '', faixa: '', transcricao: '', ficha: null, formato: '', hookVisual: '', retencao: '', impressoes: '', avatarOp: '', busy: false };
 }
 
 // ---------------------------------------------------------------- utils
@@ -170,7 +170,7 @@ function stepHead(n, titulo, done, extra = '') {
 
 function renderP1() {
   const p = $('#p1');
-  const okOrigem = F.file && F.linkBiblioteca && F.nicho && F.faixa;
+  const okOrigem = F.file && F.linkBiblioteca && F.diasAtivos !== '' && F.nicho && F.faixa;
   p.innerHTML = `${stepHead(1, 'Vídeo e origem', okOrigem)}
   <div class="body stack">
     ${F.file ? `<video src="${F.url}" controls playsinline></video>
@@ -178,6 +178,7 @@ function renderP1() {
     : `<div class="drop" id="drop" tabindex="0" role="button"><strong>Solte o vídeo aqui</strong><span class="muted small">ou clique para escolher (mp4, mov, webm)</span></div>`}
     <input type="file" id="file" accept="video/*" class="hidden">
     <label class="f"><span>Link do anúncio na Biblioteca</span><input type="url" id="link" placeholder="https://www.facebook.com/ads/library/?id=…" value="${esc(F.linkBiblioteca)}"></label>
+    <label class="f"><span>Dias ativos <em>(na Biblioteca, contando até hoje)</em></span><input type="number" id="diasAtivos" min="0" inputmode="numeric" placeholder="Ex.: 45" value="${esc(F.diasAtivos)}"></label>
     <label class="f"><span>Anunciante e oferta <em>(opcional)</em></span><input type="text" id="anunciante" placeholder="Ex.: Kit Radiestesia Cigana, R$ 27" value="${esc(F.anunciante)}"></label>
     <label class="f"><span>Nicho</span>
       <div class="row"><select id="nicho" style="flex:1">${opts(S.listas.nichos, F.nicho, 'Escolha o nicho')}</select><button class="btn ghost small" id="addNicho" type="button">Novo</button></div>
@@ -199,6 +200,7 @@ function renderP1() {
   $('#file').onchange = (e) => setFile(e.target.files[0]);
   $('#link').oninput = (e) => { F.linkBiblioteca = e.target.value.trim(); updateFalta(); };
   $('#anunciante').oninput = (e) => (F.anunciante = e.target.value);
+  $('#diasAtivos').oninput = (e) => { F.diasAtivos = e.target.value; updateFalta(); };
   $('#nicho').onchange = (e) => { F.nicho = e.target.value; updateFalta(); };
   $('#addNicho').onclick = () => { $('#nichoNovoRow').classList.toggle('hidden'); $('#nichoNovo').focus(); };
   $('#nichoOk').onclick = async () => {
@@ -367,6 +369,7 @@ function faltando() {
   const f = [];
   if (!F.file) f.push('vídeo');
   if (!F.linkBiblioteca) f.push('link');
+  if (F.diasAtivos === '') f.push('dias ativos');
   if (!F.nicho) f.push('nicho');
   if (!F.faixa) f.push('faixa');
   if (!F.ficha) f.push('dissecação');
@@ -382,7 +385,7 @@ function updateFalta() {
   el.textContent = f.length ? `Falta: ${f.join(', ')}.` : 'Tudo pronto. O ID é gerado na hora de salvar.';
   $('#salvar').disabled = f.length > 0 || F.busy;
   ['p1', 'p2', 'p3', 'p4'].forEach((id, i) => {
-    const done = [F.file && F.linkBiblioteca && F.nicho && F.faixa, F.transcricao.trim(), F.ficha, F.formato && F.hookVisual.trim() && F.retencao.trim() && (F.ficha?.avatar !== 'Operador define' || F.avatarOp)][i];
+    const done = [F.file && F.linkBiblioteca && F.diasAtivos !== '' && F.nicho && F.faixa, F.transcricao.trim(), F.ficha, F.formato && F.hookVisual.trim() && F.retencao.trim() && (F.ficha?.avatar !== 'Operador define' || F.avatarOp)][i];
     const n = $(`#${id} .step-n`); if (n) { n.classList.toggle('done', !!done); n.textContent = done ? '✓' : i + 1; }
   });
 }
@@ -423,7 +426,7 @@ async function salvar() {
       await api('/api/listas/item', { method: 'POST', body: { lista: 'formato', valor: F.formato } });
       S.listas = await api('/api/listas');
     }
-    c = await api('/api/criativos', { method: 'POST', body: { nicho: F.nicho, faixa: F.faixa, anunciante: F.anunciante, linkBiblioteca: F.linkBiblioteca, formato: F.formato.trim(), hookVisual: F.hookVisual, retencao: F.retencao, impressoes: F.impressoes, ficha: { ...ficha, transcricao_limpa: F.transcricao } } });
+    c = await api('/api/criativos', { method: 'POST', body: { nicho: F.nicho, faixa: F.faixa, anunciante: F.anunciante, diasAtivos: Number(F.diasAtivos), linkBiblioteca: F.linkBiblioteca, formato: F.formato.trim(), hookVisual: F.hookVisual, retencao: F.retencao, impressoes: F.impressoes, ficha: { ...ficha, transcricao_limpa: F.transcricao } } });
   } catch (e) {
     F.busy = false; btn.disabled = false; btn.textContent = 'Salvar no Swipe';
     return toast(e.message, true);
@@ -456,7 +459,8 @@ async function pageSwipe(abrirId) {
     <select data-f="formato">${opts(uniq((c) => c.formato), fl.formato, 'Formato')}</select>
     <select data-f="cat">${opts(ANG_CATS, fl.cat, 'Categoria do ângulo')}</select>
     <select data-f="consc">${opts(CONSC, fl.consc, 'Consciência')}</select>
-    <select data-f="op">${opts(uniq((c) => c.operadorNome), fl.op, 'Operador')}</select>`;
+    <select data-f="op">${opts(uniq((c) => c.operadorNome), fl.op, 'Operador')}</select>
+    <select data-f="dias"><option value="">Dias ativos</option>${[7, 15, 30, 60, 90].map((d) => `<option value="${d}" ${String(fl.dias) === String(d) ? 'selected' : ''}>${d}+ dias</option>`).join('')}</select>`;
   $$('#filtros [data-f]').forEach((el) => el.oninput = el.onchange = () => { fl[el.dataset.f] = el.value; renderTabela(); });
   renderTabela();
   if (abrirId) openDrawer(abrirId);
@@ -472,6 +476,7 @@ function filtrados() {
     if (f.cat && fi.angulo_hook?.categoria !== f.cat && fi.angulo_body?.categoria !== f.cat) return false;
     if (f.consc && fi.consciencia !== f.consc) return false;
     if (f.op && c.operadorNome !== f.op) return false;
+    if (f.dias && !(Number(c.diasAtivos) >= Number(f.dias))) return false;
     if (q) {
       const hay = [c.id, c.anunciante, c.formato, c.hookVisual, c.retencao, c.impressoes, fi.hook_literal, fi.modelo_gancho, fi.transcricao_limpa, fi.angulo_hook?.angulo, fi.angulo_body?.angulo].join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
@@ -488,11 +493,12 @@ function renderTabela() {
     return;
   }
   if (!list.length) { $('#tabela').innerHTML = `<div class="empty"><h2>Nada com esses filtros</h2><p>Limpe algum filtro para ver mais criativos.</p></div>`; return; }
-  $('#tabela').innerHTML = `<table><thead><tr><th>ID</th><th>Nicho</th><th>Formato</th><th>Modelo do gancho</th><th>Ângulo do hook</th><th>Ângulo do body</th><th>Consciência</th><th>Estrutura</th></tr></thead>
+  $('#tabela').innerHTML = `<table><thead><tr><th>ID</th><th>Dias ativos</th><th>Nicho</th><th>Formato</th><th>Modelo do gancho</th><th>Ângulo do hook</th><th>Ângulo do body</th><th>Consciência</th><th>Estrutura</th></tr></thead>
   <tbody>${list.map((c) => {
     const fi = c.ficha || {};
     return `<tr data-id="${c.id}" tabindex="0">
       <td class="id">${c.id}<div class="sub">${fmtData(c.data)} · ${esc(c.operadorNome.split(' ')[0])}</div></td>
+      <td class="dias">${c.diasAtivos ?? '<span class="muted">—</span>'}</td>
       <td>${esc(c.nicho)}<div><span class="pill ${esc(c.faixa)}">${esc(c.faixa)}</span></div></td>
       <td>${esc(c.formato)}</td>
       <td style="min-width:240px">${esc(fi.modelo_gancho)}<div class="sub">${esc(fi.categoria_gancho)}</div></td>
@@ -520,6 +526,7 @@ function fichaTexto(c) {
     `Avatar: ${fi.avatar || ''}`,
     `Consciência: ${fi.consciencia || ''}`,
     `Emoção: ${(fi.emocoes || []).join(', ')}`,
+    `Dias ativos: ${c.diasAtivos ?? '—'}`,
     `Formato: ${c.formato}`,
     `Hook visual: ${c.hookVisual}`,
     `Retenção: ${c.retencao}`,
@@ -570,15 +577,16 @@ function openDrawer(id) {
   document.body.style.overflow = 'hidden';
   const leitura = (edit) => {
     $('#leitura').innerHTML = edit ? `<div class="op-area stack">
+      <label class="f"><span>Dias ativos</span><input type="number" min="0" id="e_dias" value="${esc(c.diasAtivos ?? '')}"></label>
       <label class="f"><span>Formato</span><input type="text" id="e_formato" list="fl2" value="${esc(c.formato)}"><datalist id="fl2">${formatos().map((x) => `<option value="${esc(x)}">`).join('')}</datalist></label>
       <label class="f"><span>Hook visual</span><textarea id="e_hookVisual" rows="2">${esc(c.hookVisual)}</textarea></label>
       <label class="f"><span>Retenção</span><textarea id="e_retencao" rows="2">${esc(c.retencao)}</textarea></label>
       <label class="f"><span>Impressões</span><textarea id="e_impressoes" rows="2">${esc(c.impressoes)}</textarea></label>
       <div><button class="btn" id="salvarEd">Salvar alterações</button></div></div>`
-      : `<div class="ficha"><dl><dt>Formato</dt><dd>${esc(c.formato)}</dd><dt>Hook visual</dt><dd>${esc(c.hookVisual)}</dd><dt>Retenção</dt><dd>${esc(c.retencao)}</dd><dt>Impressões</dt><dd>${esc(c.impressoes) || '<span class="muted">Sem impressões</span>'}</dd></dl></div>`;
+      : `<div class="ficha"><dl><dt>Dias ativos</dt><dd>${c.diasAtivos ?? '<span class="muted">Não informado</span>'}</dd><dt>Formato</dt><dd>${esc(c.formato)}</dd><dt>Hook visual</dt><dd>${esc(c.hookVisual)}</dd><dt>Retenção</dt><dd>${esc(c.retencao)}</dd><dt>Impressões</dt><dd>${esc(c.impressoes) || '<span class="muted">Sem impressões</span>'}</dd></dl></div>`;
     if (edit) $('#salvarEd').onclick = async () => {
       try {
-        const body = { formato: $('#e_formato').value.trim(), hookVisual: $('#e_hookVisual').value.trim(), retencao: $('#e_retencao').value.trim(), impressoes: $('#e_impressoes').value.trim() };
+        const body = { diasAtivos: $('#e_dias').value === '' ? null : Number($('#e_dias').value), formato: $('#e_formato').value.trim(), hookVisual: $('#e_hookVisual').value.trim(), retencao: $('#e_retencao').value.trim(), impressoes: $('#e_impressoes').value.trim() };
         Object.assign(c, await api(`/api/criativos/${c.id}`, { method: 'PATCH', body }));
         leitura(false); renderTabela(); toast('Alterações salvas.');
       } catch (e) { toast(e.message, true); }

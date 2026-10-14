@@ -260,3 +260,7 @@ video { max-width: 100%; }
 /* O vídeo sempre cabe na coluna dele, qualquer que seja o tamanho original (horizontal ou vertical). */
 #p1 { overflow: hidden; }
 #p1 video { display: block; width: 100%; max-width: 100%; height: auto; max-height: 480px; object-fit: contain; }
+td.dias { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.filters { grid-template-columns: 2fr repeat(7, 1fr); }
+@media (max-width: 1100px) { .filters { grid-template-columns: 1fr 1fr 1fr; } }
+@media (max-width: 640px) { .filters { grid-template-columns: 1fr 1fr; } }

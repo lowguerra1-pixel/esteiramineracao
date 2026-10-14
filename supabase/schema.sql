@@ -110,3 +110,6 @@ create index if not exists esteira_ofertas_status_idx on esteira_ofertas (status
 create unique index if not exists esteira_ofertas_cacador_idx on esteira_ofertas ((cacador->>'chave')) where cacador is not null;
 
 alter table esteira_ofertas enable row level security;
+
+-- Dias que o anúncio estava ativo na Biblioteca quando entrou no Swipe (mostra se o criativo é validado).
+alter table esteira_criativos add column if not exists dias_ativos int;
