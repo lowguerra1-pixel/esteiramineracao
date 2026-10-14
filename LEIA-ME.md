@@ -44,3 +44,13 @@ Depois, **Deploys › Trigger deploy**.
 
 ## Rodar no computador
 Crie um arquivo `.env` (copie de `.env.example`) e rode `node dev.mjs`. Abre em http://localhost:4747.
+
+## App Ofertas (`/ofertas/`)
+Mineração e Modelagem de ofertas, no mesmo site, com o mesmo login.
+
+- **Mineração:** anote a oferta em uma frase (link, nicho, ticket e anunciantes são opcionais; o nº de anunciantes define a classe A a D). Trie e decida: Modelar (escolhe a trilha), Monitorar 7 dias ou Descartar com motivo.
+- **Caçador:** em Mineração, "Puxar Caçador" lê a planilha (abas Ranking, Evidências e Histórico). As descartadas pelo Caçador ficam numa aba própria, com "Testar mesmo assim". A decisão volta para a coluna Status (Kaian); o ROAS do teste vai para Resultado e para uma linha nova na aba Calibração.
+- **Modelagem:** etapas por trilha (com responsável), checklist low ticket de 10 itens, teste, resultado (abaixo de 1 arquiva; 1 a 1,4 caso a caso; 1,4 a 1,8 otimiza; 1,8+ teste bom), diagnóstico do funil pela régua do SOP MVT, escala e manutenção. Mecanismo vencedor vira oferta filha.
+- **Placar do Caçador:** acerto nas recomendadas e nas descartadas, por faixa de score e por classe.
+
+Para o app ler e escrever na planilha: em **Ofertas › Ajustes**, clique em **Reconectar Google** e aceite a permissão de planilhas (a Google Sheets API precisa estar ativa no projeto do Google Cloud). O SQL das ofertas está no fim de `supabase/schema.sql`.
