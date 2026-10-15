@@ -52,7 +52,14 @@ async function boot() {
   try {
     S.user = (await api('/api/eu')).usuario;
     [S.testes, S.ofertas, S.cfg] = await Promise.all([api('/api/testes'), api('/api/ofertas').catch(() => []), api('/api/testes/config')]);
-  } catch { return; }
+  } catch (err) {
+    if (!S.token) return;
+    const semTabela = /esteira_testes/.test(err.message);
+    $('#app').innerHTML = `<div class="login"><div class="login-box"><h1>Testes</h1>
+      <p class="lede">${semTabela ? 'O banco ainda não tem as tabelas dos testes. Rode o SQL do Testes A/B no Supabase (SQL Editor → colar → Run) e recarregue esta página.' : esc(err.message)}</p>
+      <p><a class="btn ghost" href="/">Voltar ao hub</a></p></div></div>`;
+    return;
+  }
   $('#app').innerHTML = `
   <div class="top of">
     <div class="brand"><a href="/" title="Voltar ao hub">Kaian Digital</a><span class="crumb">Testes</span></div>
