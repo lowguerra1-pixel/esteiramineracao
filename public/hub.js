@@ -5,6 +5,7 @@
 const APPS = [
   { id: 'esteira', nome: 'Esteira de Repertório', href: '/esteira/', desc: 'Minerar, dissecar e guardar no Swipe os criativos escalados.', status: statusEsteira },
   { id: 'ofertas', nome: 'Ofertas', href: '/ofertas/', desc: 'Da mineração ao teste, com o Caçador e o placar de acerto.', status: statusOfertas },
+  { id: 'testes', nome: 'Testes A/B', href: '/testes/', desc: 'Duas páginas, um link só, e cada venda dizendo de qual página veio.', status: statusTestes },
 ];
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -34,6 +35,13 @@ async function statusOfertas() {
   const teste = l.filter((o) => o.status === 'teste').length;
   const rodando = l.filter((o) => ['otimizar', 'escala', 'manutencao'].includes(o.status)).length;
   return [`<b>${triar}</b> para triar`, `${teste} em teste, ${rodando} rodando`];
+}
+
+async function statusTestes() {
+  const l = await api('/api/testes');
+  const rodando = l.filter((t) => t.status === 'ativo');
+  const venc = rodando.filter((t) => t.placar?.veredito?.tipo === 'vencedora').length;
+  return [`<b>${rodando.length}</b> ${rodando.length === 1 ? 'teste rodando' : 'testes rodando'}`, venc ? `${venc} com vencedora` : `${l.filter((t) => t.status === 'encerrado').length} encerrados`];
 }
 
 async function login() {
