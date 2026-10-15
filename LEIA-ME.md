@@ -54,3 +54,15 @@ Mineração e Modelagem de ofertas, no mesmo site, com o mesmo login.
 - **Placar do Caçador:** acerto nas recomendadas e nas descartadas, por faixa de score e por classe.
 
 Para o app ler e escrever na planilha: em **Ofertas › Ajustes**, clique em **Reconectar Google** e aceite a permissão de planilhas (a Google Sheets API precisa estar ativa no projeto do Google Cloud). O SQL das ofertas está no fim de `supabase/schema.sql`.
+
+## App Testes A/B (/testes)
+
+Teste de páginas de vendas sem redirecionar e sem perder o rastreio.
+
+- **Divisor**: uma edge function no site da oferta (`netlify/edge-functions/ab.js`, hoje na radicigana). Sem teste ligado, não faz nada. Com teste ligado, sorteia a página, guarda em cookie por 90 dias e entrega a página escolhida no mesmo endereço. Qualquer erro abre a página A.
+- **Página B**: fica numa pasta do mesmo site (ex.: `/b/index.html` com `css/ js/ images/` dentro). Os caminhos relativos são ajustados na entrega.
+- **Etiqueta**: a variante vai no parâmetro `vtid` do link da Lastlink. `src` (UTMIFY) e `sck` (ID do visitante da Stape) não são tocados. O `sck` serve de segunda prova: o divisor liga o ID da Stape à página.
+- **Vendas**: webhook da Lastlink em Testes → Ajustes (evento de compra completa e de reembolso). Nenhum dado do comprador é guardado.
+- **Variável**: `AB_CHAVE` igual no Hub e no site da oferta (eventos do divisor para o Hub).
+- **Ver uma página sem contar visita**: `https://dominio/?ab_ver=b`.
+- **Banco**: rodar o bloco "App Testes" do `supabase/schema.sql`.
