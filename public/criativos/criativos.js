@@ -358,7 +358,7 @@ async function pageAjustes() {
       <label class="f"><span>Contas ativas <em>(IDs, vírgula; a lista acima preenche isso)</em></span><input type="text" id="a_contas" value="${esc(S.d.contas.join(', '))}" placeholder="1297287845818107, 1684145772892649"></label>
       <div class="row"><button class="btn small" id="a_salvar">Salvar contas</button><span class="grow"></span><select id="a_dias">${opts([['3', 'últimos 3 dias'], ['7', 'últimos 7 dias'], ['14', 'últimos 14 dias'], ['31', 'últimos 31 dias']], '3')}</select><button class="btn ghost small" id="a_sync">Sincronizar agora</button><button class="btn ghost small" id="a_ver">Rodar veredito</button></div>
       <div class="small muted">O cron roda todo dia às 06:10 (3 dias). Pra puxar meses antigos, sincronize 31 dias por vez com a data final (abaixo).</div>
-      <div class="row"><label class="f"><span>Data final <em>(histórico)</em></span><input type="date" id="a_ate"></label><button class="btn ghost small" id="a_hist">Puxar 31 dias até essa data</button></div>
+      <div class="row"><label class="f"><span>Data final <em>(histórico)</em></span><input type="date" id="a_ate"></label><button class="btn ghost small" id="a_hist">Puxar 31 dias até essa data (em 5 janelas)</button></div>
       <div id="a_res" class="small"></div>
     </div></div>
     <div class="panel"><header><h2>Webhook da Lastlink</h2></header><div class="body">
@@ -401,7 +401,12 @@ async function pageAjustes() {
   $('#a_salvar').onclick = async () => { try { await api('/api/cr/config', { method: 'POST', body: { contas: $('#a_contas').value.split(',') } }); await recarregar(); toast('Contas salvas.'); } catch (e) { toast(e.message, true); } };
   const sync = async (body) => { out('#a_res', 'sincronizando…'); try { const r = await api('/api/cr/sync', { method: 'POST', body }); out('#a_res', `${r.desde} → ${r.ate}: ${r.linhas} linhas, ${r.anuncios} anúncios, ${r.criados} criativos novos, ${r.semPar} sem par, ${r.ligados} religados.`); await recarregar(); contadores(); } catch (e) { out('#a_res', e.message, true); } };
   $('#a_sync').onclick = () => sync({ dias: Number($('#a_dias').value) });
-  $('#a_hist').onclick = () => { const ate = $('#a_ate').value; if (!ate) return toast('Escolha a data final.', true); const d = new Date(ate + 'T12:00'); d.setDate(d.getDate() - 30); sync({ desde: d.toLocaleDateString('en-CA'), ate }); };
+  $('#a_hist').onclick = async () => {
+    const ate = $('#a_ate').value; if (!ate) return toast('Escolha a data final.', true);
+    // 31 dias em 5 janelas de 7 (cada chamada precisa caber em 60 s).
+    let fim = new Date(ate + 'T12:00');
+    for (let i = 0; i < 5; i++) { const ini = new Date(fim); ini.setDate(fim.getDate() - 6); await sync({ desde: ini.toLocaleDateString('en-CA'), ate: fim.toLocaleDateString('en-CA') }); fim = new Date(ini); fim.setDate(ini.getDate() - 1); }
+  };
   $('#a_ver').onclick = async () => { out('#a_res', 'rodando veredito…'); try { const r = await api('/api/cr/veredito', { method: 'POST' }); out('#a_res', r.mudancas.length ? r.mudancas.join(' · ') : 'Nenhuma mudança.'); await recarregar(); contadores(); } catch (e) { out('#a_res', e.message, true); } };
   $('#a_religar').onclick = async () => { try { const r = await api('/api/cr/religar', { method: 'POST' }); toast(`${r.ligados} ligados.`); await recarregar(); } catch (e) { toast(e.message, true); } };
   $('#a_log').onclick = async () => { const l = await api('/api/cr/log'); $('#a_log_out').innerHTML = `<div class="hist">${l.map((x) => `<div>${fmtDH(x.em)} · <b>${esc(x.tipo)}</b> · ${esc(x.resumo || '')}</div>`).join('')}</div>`; };
