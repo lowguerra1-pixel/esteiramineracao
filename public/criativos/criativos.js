@@ -350,7 +350,8 @@ async function pageAjustes() {
   $('#main').innerHTML = `<div class="head"><div><h1>Ajustes</h1><div class="muted">Contas do Meta, webhook da Lastlink, regras do veredito e importação da semente.</div></div></div>
   <div class="aj">
     <div class="panel"><header><h2>Meta Ads</h2><span class="small ${S.d.metaConfigurado ? '' : 'muted'}">${S.d.metaConfigurado ? 'token configurado na Netlify' : 'falta META_ACCESS_TOKEN na Netlify'}</span></header><div class="body">
-      <label class="f"><span>Contas de anúncio <em>(IDs numéricos, vírgula)</em></span><input type="text" id="a_contas" value="${esc(S.d.contas.join(', '))}" placeholder="1297287845818107, 1684145772892649"></label>
+      <div id="a_lista" class="small muted">${S.d.metaConfigurado ? 'carregando as contas do token…' : 'Cadastre o token pra listar as contas.'}</div>
+      <label class="f"><span>Contas ativas <em>(IDs, vírgula; a lista acima preenche isso)</em></span><input type="text" id="a_contas" value="${esc(S.d.contas.join(', '))}" placeholder="1297287845818107, 1684145772892649"></label>
       <div class="row"><button class="btn small" id="a_salvar">Salvar contas</button><span class="grow"></span><select id="a_dias">${opts([['3', 'últimos 3 dias'], ['7', 'últimos 7 dias'], ['14', 'últimos 14 dias'], ['31', 'últimos 31 dias']], '3')}</select><button class="btn ghost small" id="a_sync">Sincronizar agora</button><button class="btn ghost small" id="a_ver">Rodar veredito</button></div>
       <div class="small muted">O cron roda todo dia às 06:10 (3 dias). Pra puxar meses antigos, sincronize 31 dias por vez com a data final (abaixo).</div>
       <div class="row"><label class="f"><span>Data final <em>(histórico)</em></span><input type="date" id="a_ate"></label><button class="btn ghost small" id="a_hist">Puxar 31 dias até essa data</button></div>
@@ -384,6 +385,14 @@ async function pageAjustes() {
     </div></div>
   </div>`;
   const out = (el, txt, erro) => { $(el).textContent = txt; $(el).style.color = erro ? 'var(--erro)' : ''; };
+  if (S.d.metaConfigurado) {
+    try {
+      const contas = await api('/api/cr/meta/contas');
+      const sel = new Set(S.d.contas.map(String));
+      $('#a_lista').className = ''; $('#a_lista').innerHTML = `<div class="small muted" style="margin-bottom:6px">Contas que o token enxerga (${contas.length}). Marque as que entram no sync, como na UTMIFY:</div><div class="chips">${contas.map((c) => `<button class="chip ${sel.has(String(c.id)) ? 'on' : ''}" data-c="${esc(c.id)}" title="${esc(c.status)} · ${esc(c.moeda)}${c.bm ? ' · ' + esc(c.bm) : ''}">${esc(c.nome)} <small>${esc(c.id)}</small></button>`).join('')}</div>`;
+      $$('#a_lista .chip').forEach((b) => b.onclick = () => { b.classList.toggle('on'); $('#a_contas').value = $$('#a_lista .chip.on').map((x) => x.dataset.c).join(', '); });
+    } catch (e) { out('#a_lista', e.message, true); }
+  }
   $('#a_salvar').onclick = async () => { try { await api('/api/cr/config', { method: 'POST', body: { contas: $('#a_contas').value.split(',') } }); await recarregar(); toast('Contas salvas.'); } catch (e) { toast(e.message, true); } };
   const sync = async (body) => { out('#a_res', 'sincronizando…'); try { const r = await api('/api/cr/sync', { method: 'POST', body }); out('#a_res', `${r.desde} → ${r.ate}: ${r.linhas} linhas, ${r.anuncios} anúncios, ${r.criados} criativos novos, ${r.semPar} sem par, ${r.ligados} religados.`); await recarregar(); contadores(); } catch (e) { out('#a_res', e.message, true); } };
   $('#a_sync').onclick = () => sync({ dias: Number($('#a_dias').value) });
