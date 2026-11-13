@@ -200,3 +200,168 @@ alter table esteira_testes_contagem enable row level security;
 alter table esteira_testes_visitantes enable row level security;
 alter table esteira_testes_vendas enable row level security;
 alter table esteira_testes_webhooks enable row level security;
+
+-- ================================================================ App Criativos (Setor de Criativos)
+-- Uma linha por criativo (ID = nome do anúncio no Meta, ex.: CFAM-L4-UGC-05). Métricas vêm da Meta
+-- Marketing API (gasto, cliques, vídeo) e as vendas do webhook da Lastlink (utm_content = ID do criativo).
+
+create table if not exists esteira_cr_ofertas (
+  id text primary key,                            -- slug curto, igual ao prefixo dos anúncios: CFAM, KSN, RADICIG
+  nome text not null,
+  familia text,                                   -- Constelação, Nervo Vago, Radiestesia, Arteterapia…
+  estado text not null default 'validacao' check (estado in ('validacao', 'escalando', 'em_risco', 'pausada', 'encerrada')),
+  mix jsonb not null default '{"modelagem":60,"variacao":30,"zero":10}'::jsonb,
+  prefixos jsonb not null default '[]'::jsonb,    -- outros prefixos de anúncio que pertencem à oferta (ex.: ["CIGA","RADI-CIG"])
+  produtos jsonb not null default '[]'::jsonb,    -- nomes/IDs de produto da Lastlink que contam como venda desta oferta
+  pasta_drive text,
+  pv_url text,
+  notas text,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
+);
+
+create table if not exists esteira_cr_levas (
+  id text primary key,                            -- CFAM-L4
+  oferta_id text not null references esteira_cr_ofertas(id),
+  numero int not null,
+  planejada date,
+  no_ar date,
+  hipotese text,                                  -- o que esta leva testa (ângulo, formato, público)
+  status text not null default 'planejada' check (status in ('planejada', 'producao', 'no_ar', 'encerrada')),
+  criado_em timestamptz not null default now(),
+  unique (oferta_id, numero)
+);
+
+create table if not exists esteira_cr_criativos (
+  id text primary key,                            -- nome do anúncio no Meta
+  oferta_id text not null references esteira_cr_ofertas(id),
+  leva_id text references esteira_cr_levas(id),
+  tipo text not null default 'modelagem' check (tipo in ('modelagem', 'variacao', 'zero')),
+  pai_id text,                                    -- criativo que serviu de base
+  formato text,                                   -- IMG, VID, UGC, CAR
+  angulo text,
+  mecanismo text,
+  hook text,
+  body text,
+  copy text,                                      -- texto do anúncio / roteiro
+  arquivo_url text,                               -- link do arquivo (Drive)
+  status text not null default 'fila' check (status in ('fila', 'briefing', 'producao', 'revisao', 'aprovado', 'no_ar', 'meio', 'vencedor', 'fadiga', 'morto')),
+  status_em timestamptz not null default now(),
+  no_ar_em timestamptz,                           -- primeira vez que entrou no ar
+  score int,                                      -- nota do revisor (0 a 10)
+  aprendizado text,                               -- 1 linha: o que este criativo ensinou
+  historico jsonb not null default '[]'::jsonb,   -- [{em, de, para, por, nota}]
+  criado_por text,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
+);
+create index if not exists esteira_cr_criativos_oferta on esteira_cr_criativos (oferta_id, status);
+create index if not exists esteira_cr_criativos_leva on esteira_cr_criativos (leva_id);
+
+-- Anúncios do Meta encontrados no sync, ligados ao criativo pelo nome.
+create table if not exists esteira_cr_ads (
+  ad_id text primary key,
+  conta_id text not null,
+  ad_name text not null,
+  adset_id text, adset_name text,
+  campaign_id text, campaign_name text,
+  criativo_id text,                               -- null = anúncio sem criativo cadastrado (aparece em "sem par")
+  status text,
+  criado_em_meta timestamptz,
+  sync_em timestamptz not null default now()
+);
+create index if not exists esteira_cr_ads_criativo on esteira_cr_ads (criativo_id);
+
+-- Métricas diárias por anúncio (um criativo pode rodar em vários anúncios/contas).
+create table if not exists esteira_cr_metricas (
+  ad_id text not null,
+  dia date not null,
+  criativo_id text,
+  gasto numeric not null default 0,
+  impressoes int not null default 0,
+  cliques int not null default 0,
+  lpv int not null default 0,
+  ic int not null default 0,
+  video_views int not null default 0,
+  video_3s int not null default 0,
+  video_75 int not null default 0,
+  primary key (ad_id, dia)
+);
+create index if not exists esteira_cr_metricas_criativo on esteira_cr_metricas (criativo_id, dia);
+
+-- Vendas (webhook da Lastlink ou importação), sem dados do comprador.
+create table if not exists esteira_cr_vendas (
+  id text primary key,                            -- PaymentId da Lastlink (ou LL-<id> na importação)
+  criativo_id text,
+  oferta_id text,
+  utm_content text,
+  utm_campaign text,
+  valor numeric,
+  produto text,
+  pago_em timestamptz,
+  reembolso boolean not null default false,
+  is_test boolean not null default false,
+  origem text not null default 'webhook',         -- webhook | importacao
+  criado_em timestamptz not null default now()
+);
+create index if not exists esteira_cr_vendas_criativo on esteira_cr_vendas (criativo_id, pago_em);
+create index if not exists esteira_cr_vendas_dia on esteira_cr_vendas (pago_em);
+
+-- O que a operação aprendeu: vereditos, dissecações, hipóteses, notas (de agente ou de pessoa).
+create table if not exists esteira_cr_aprendizados (
+  id bigserial primary key,
+  oferta_id text,
+  leva_id text,
+  criativo_id text,
+  tipo text not null check (tipo in ('veredito', 'dissecacao', 'hipotese', 'nota')),
+  texto text not null,
+  autor text not null default 'sistema',
+  criado_em timestamptz not null default now()
+);
+create index if not exists esteira_cr_aprendizados_oferta on esteira_cr_aprendizados (oferta_id, criado_em desc);
+
+-- Registro de cada envio do webhook e de cada sync (para conferir que está chegando).
+create table if not exists esteira_cr_log (
+  id bigserial primary key,
+  em timestamptz not null default now(),
+  tipo text not null,                             -- webhook | sync | veredito | importacao
+  resumo text,
+  detalhe jsonb
+);
+
+alter table esteira_cr_ofertas enable row level security;
+alter table esteira_cr_levas enable row level security;
+alter table esteira_cr_criativos enable row level security;
+alter table esteira_cr_ads enable row level security;
+alter table esteira_cr_metricas enable row level security;
+alter table esteira_cr_vendas enable row level security;
+alter table esteira_cr_aprendizados enable row level security;
+alter table esteira_cr_log enable row level security;
+
+-- Agregado por criativo (tudo que o Board, a Tabela e o motor de veredito precisam), calculado no banco.
+create or replace function esteira_cr_resumo(p_desde date default null)
+returns table (
+  criativo_id text, gasto numeric, impressoes bigint, cliques bigint, lpv bigint, ic bigint,
+  video_views bigint, video_3s bigint, video_75 bigint, vendas bigint, receita numeric, reembolsos bigint,
+  primeiro_dia date, ultimo_dia date
+) language sql stable as $$
+  with m as (
+    select criativo_id, sum(gasto) gasto, sum(impressoes) impressoes, sum(cliques) cliques, sum(lpv) lpv, sum(ic) ic,
+           sum(video_views) video_views, sum(video_3s) video_3s, sum(video_75) video_75, min(dia) primeiro_dia, max(dia) ultimo_dia
+    from esteira_cr_metricas where criativo_id is not null and (p_desde is null or dia >= p_desde) group by criativo_id
+  ), v as (
+    select criativo_id, count(*) filter (where not reembolso and not is_test) vendas,
+           coalesce(sum(valor) filter (where not reembolso and not is_test), 0) receita,
+           count(*) filter (where reembolso) reembolsos
+    from esteira_cr_vendas where criativo_id is not null and (p_desde is null or pago_em::date >= p_desde) group by criativo_id
+  )
+  select coalesce(m.criativo_id, v.criativo_id), coalesce(m.gasto, 0), coalesce(m.impressoes, 0), coalesce(m.cliques, 0), coalesce(m.lpv, 0), coalesce(m.ic, 0),
+         coalesce(m.video_views, 0), coalesce(m.video_3s, 0), coalesce(m.video_75, 0), coalesce(v.vendas, 0), coalesce(v.receita, 0), coalesce(v.reembolsos, 0),
+         m.primeiro_dia, m.ultimo_dia
+  from m full join v on v.criativo_id = m.criativo_id
+$$;
+
+insert into esteira_config (chave, valor) values
+  ('cr_regras', '{"gastoMin":150,"vendasMin":5,"roasSegue":1.3,"roasMorre":1.0,"vencedorVendas":20,"fadigaQueda":0.3,"filhos":3,"horasVeredito":72,"diasRisco":14}'),
+  ('cr_contas', '[]')
+on conflict (chave) do nothing;

@@ -1,0 +1,86 @@
+/* App Criativos: complementa /styles.css e /ofertas/ofertas.css (tabs, kanban, cards). */
+.top.cr { grid-template-columns: auto 1fr auto; }
+
+/* painel */
+.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.kpi { background: var(--card); border: 1px solid #D5DBE1; border-radius: 10px; padding: 14px 16px; }
+.kpi .v { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.kpi .v small { font-size: 14px; color: var(--muted); font-weight: 600; margin-left: 6px; }
+.kpi .l { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.kpi.ok .v { color: var(--ok); }
+.kpi.warn .v { color: var(--marca-ink); }
+.kpi.bad .v { color: var(--erro); }
+.ofrow { display: grid; grid-template-columns: 1.4fr 110px 120px 90px 90px 90px 130px 150px; gap: 10px; align-items: center; padding: 10px 14px; border-top: 1px solid var(--line-soft); font-size: 14px; }
+.ofrow.h { color: var(--muted); font-size: 12px; font-weight: 600; border-top: 0; }
+.ofrow b.nome { display: block; }
+.ofrow .n { font-variant-numeric: tabular-nums; }
+.est { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--line-soft); white-space: nowrap; }
+.est.escalando { background: #D7F0E3; color: var(--ok); }
+.est.em_risco { background: #FDECEA; color: var(--erro); }
+.est.validacao { background: var(--blue-soft); color: #213A9E; }
+.est.pausada, .est.encerrada { background: var(--line-soft); color: var(--muted); }
+
+/* board */
+.filtros { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+.filtros select, .filtros input { padding: 6px 8px; font-size: 13.5px; }
+.board { display: grid; grid-template-columns: repeat(10, minmax(180px, 1fr)); gap: 8px; overflow-x: auto; align-items: start; padding-bottom: 8px; }
+.board .col { min-height: 160px; padding: 8px; }
+.board .col > h2 { font-size: 12.5px; padding: 2px 4px 8px; }
+.board .col.vencedor { background: #D7F0E3; }
+.board .col.morto { background: #E4E7EA; }
+.board .col.fadiga { background: #FBE6D4; }
+.board .col.aprovado { background: var(--marca-soft); }
+.ccard { display: block; background: var(--card); border-radius: 6px; padding: 8px 10px; margin-bottom: 6px; text-decoration: none; color: inherit; border: 1px solid transparent; cursor: pointer; }
+.ccard:hover { border-color: var(--ink); }
+.ccard .id { font-size: 12px; font-weight: 700; word-break: break-all; }
+.ccard .m { font-size: 12px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.ccard .m b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.ccard .m .good { color: var(--ok); }
+.ccard .m .bad { color: var(--erro); }
+.tipo { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 1px 5px; border-radius: 3px; background: var(--line-soft); }
+.tipo.zero { background: var(--ink); color: #fff; }
+.tipo.variacao { background: var(--blue-soft); color: #213A9E; }
+
+/* tabela */
+table.tb { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.tb th, .tb td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--line-soft); white-space: nowrap; }
+.tb th { font-size: 12px; color: var(--muted); font-weight: 600; cursor: pointer; user-select: none; position: sticky; top: 0; background: var(--card); }
+.tb th.on { color: var(--ink); }
+.tb td.n, .tb th.n { text-align: right; font-variant-numeric: tabular-nums; }
+.tb tr:hover td { background: #F7F9FA; }
+.tb td a { color: inherit; text-decoration: none; font-weight: 600; }
+
+/* calendário */
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.cal .d { background: var(--card); border: 1px solid #D5DBE1; border-radius: 8px; min-height: 92px; padding: 8px; font-size: 12.5px; }
+.cal .d.hoje { border-color: var(--ink); }
+.cal .d .dt { font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+.cal .d .dt.fds { color: #B0B8C0; }
+.cal .lv { display: block; background: var(--blue-soft); color: #213A9E; border-radius: 4px; padding: 3px 6px; margin-bottom: 4px; text-decoration: none; }
+.cal .lv.no_ar { background: #D7F0E3; color: var(--ok); }
+
+/* ficha do criativo (modal) */
+.modal { position: fixed; inset: 0; background: rgba(22, 32, 42, .5); display: grid; place-items: start center; padding: 40px 16px; overflow: auto; z-index: 50; }
+.modal .box { background: var(--card); border-radius: 12px; width: min(880px, 100%); padding: 22px 24px; }
+.modal h2 { font-size: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.modal .x { float: right; }
+.fh { display: flex; justify-content: space-between; gap: 12px; align-items: start; margin-bottom: 14px; }
+.mets { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin: 12px 0; }
+.mets div { background: #F3F5F7; border-radius: 6px; padding: 8px 10px; }
+.mets .v { font-weight: 800; font-size: 18px; font-variant-numeric: tabular-nums; }
+.mets .l { font-size: 11.5px; color: var(--muted); }
+.spark { display: flex; align-items: end; gap: 2px; height: 48px; margin: 6px 0 12px; }
+.spark i { flex: 1; background: var(--blue); border-radius: 2px 2px 0 0; min-height: 2px; opacity: .85; }
+.spark i.neg { background: var(--erro); }
+.acoes { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 16px; }
+.hist { font-size: 12.5px; color: var(--muted); max-height: 160px; overflow: auto; border-top: 1px solid var(--line-soft); padding-top: 8px; }
+.hist div { padding: 2px 0; }
+.form3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.aprend { background: #F3F5F7; border-radius: 6px; padding: 8px 10px; font-size: 13px; margin-bottom: 6px; }
+.aprend .t { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--muted); margin-right: 6px; }
+
+/* ajustes */
+.aj { display: grid; gap: 16px; max-width: 820px; }
+.aj .panel > .body { display: grid; gap: 10px; }
+pre.code { background: #F3F5F7; padding: 8px 10px; border-radius: 6px; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+@media (max-width: 900px) { .kpis { grid-template-columns: 1fr 1fr; } .form3, .mets { grid-template-columns: 1fr 1fr; } .ofrow { grid-template-columns: 1fr 90px 90px; } .ofrow > :nth-child(n+4) { display: none; } }

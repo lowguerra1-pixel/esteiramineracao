@@ -66,3 +66,14 @@ Teste de páginas de vendas sem redirecionar e sem perder o rastreio.
 - **Variável**: `AB_CHAVE` igual no Hub e no site da oferta (eventos do divisor para o Hub).
 - **Ver uma página sem contar visita**: `https://dominio/?ab_ver=b`.
 - **Banco**: rodar o bloco "App Testes" do `supabase/schema.sql`.
+
+## App Criativos (/criativos)
+
+A base de criativos da operação, o kanban de 72h e o motor de veredito. É a "UTMIFY própria": gasto da Meta + vendas da Lastlink, ligados pelo nome do anúncio.
+
+- **ID do criativo = nome do anúncio no Meta** (`CFAM-L4-UGC-05`). O prefixo (`CFAM`) é a sigla da oferta. Sem isso nada se liga.
+- **Meta Ads**: variável `META_ACCESS_TOKEN` na Netlify (token de System User com `ads_read`). Em Criativos › Ajustes, cadastre os IDs das contas. Um cron roda todo dia às 06:10 (3 dias); o histórico se puxa 31 dias por vez em Ajustes.
+- **Vendas**: webhook da Lastlink em Criativos › Ajustes (eventos Purchase_Order_Confirmed, Payment_Refund, Payment_Chargeback). A venda é ligada pelo `utm_content`.
+- **Veredito automático** (regras em Ajustes): no ar há 72h com R$150 ou 5 vendas → ROAS ≥ 1,3 segue, < 1,0 morre, no meio vira "variar"; 20 vendas com ROAS ≥ 1,3 vira vencedor e abre 3 filhos de modelagem na fila; vencedor com ROAS 7d caindo 30% vs 30d vira fadiga; oferta escalando sem vencedor novo há 14 dias vira "em risco".
+- **Banco**: rodar o bloco "App Criativos" do `supabase/schema.sql`.
+- **Semente**: Ajustes › Importar aceita ofertas.csv, criativos.csv, vendas.csv e metricas.csv.
