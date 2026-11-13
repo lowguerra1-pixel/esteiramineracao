@@ -349,7 +349,11 @@ async function pageAjustes() {
   const R = S.d.regras;
   $('#main').innerHTML = `<div class="head"><div><h1>Ajustes</h1><div class="muted">Contas do Meta, webhook da Lastlink, regras do veredito e importação da semente.</div></div></div>
   <div class="aj">
-    <div class="panel"><header><h2>Meta Ads</h2><span class="small ${S.d.metaConfigurado ? '' : 'muted'}">${S.d.metaConfigurado ? 'token configurado na Netlify' : 'falta META_ACCESS_TOKEN na Netlify'}</span></header><div class="body">
+    <div class="panel"><header><h2>Meta Ads</h2><span class="small ${S.d.metaConfigurado ? '' : 'muted'}">${S.d.meta?.fonte === 'env' ? 'token fixo na Netlify' : S.d.meta ? `conectada como ${esc(S.d.meta.usuario || '?')} · renova sozinha (vence ${fmtData(S.d.meta.exp)})` : 'não conectada'}</span></header><div class="body">
+      <details ${S.d.metaConfigurado ? '' : 'open'}><summary class="small">Conectar / trocar o token da Meta</summary>
+        <div class="small muted" style="margin:6px 0">Abra o <a href="https://developers.facebook.com/tools/explorer/?app_id=2091305061809464" target="_blank">Graph API Explorer</a>, escolha o app "Inteligência Artificial", adicione a permissão <code>ads_read</code>, clique em "Generate Access Token" e cole aqui. O app troca por um token de 60 dias e renova sozinho.</div>
+        <div class="row"><input type="password" id="a_tok" placeholder="EAAB…" style="flex:1"><button class="btn small" id="a_conectar">Conectar</button></div>
+      </details>
       <div id="a_lista" class="small muted">${S.d.metaConfigurado ? 'carregando as contas do token…' : 'Cadastre o token pra listar as contas.'}</div>
       <label class="f"><span>Contas ativas <em>(IDs, vírgula; a lista acima preenche isso)</em></span><input type="text" id="a_contas" value="${esc(S.d.contas.join(', '))}" placeholder="1297287845818107, 1684145772892649"></label>
       <div class="row"><button class="btn small" id="a_salvar">Salvar contas</button><span class="grow"></span><select id="a_dias">${opts([['3', 'últimos 3 dias'], ['7', 'últimos 7 dias'], ['14', 'últimos 14 dias'], ['31', 'últimos 31 dias']], '3')}</select><button class="btn ghost small" id="a_sync">Sincronizar agora</button><button class="btn ghost small" id="a_ver">Rodar veredito</button></div>
@@ -393,6 +397,7 @@ async function pageAjustes() {
       $$('#a_lista .chip').forEach((b) => b.onclick = () => { b.classList.toggle('on'); $('#a_contas').value = $$('#a_lista .chip.on').map((x) => x.dataset.c).join(', '); });
     } catch (e) { out('#a_lista', e.message, true); }
   }
+  $('#a_conectar').onclick = async () => { try { const r = await api('/api/cr/meta/conectar', { method: 'POST', body: { token: $('#a_tok').value } }); toast(`Meta conectada${r.usuario ? ' como ' + r.usuario : ''}.`); await recarregar(); pageAjustes(); } catch (e) { toast(e.message, true); } };
   $('#a_salvar').onclick = async () => { try { await api('/api/cr/config', { method: 'POST', body: { contas: $('#a_contas').value.split(',') } }); await recarregar(); toast('Contas salvas.'); } catch (e) { toast(e.message, true); } };
   const sync = async (body) => { out('#a_res', 'sincronizando…'); try { const r = await api('/api/cr/sync', { method: 'POST', body }); out('#a_res', `${r.desde} → ${r.ate}: ${r.linhas} linhas, ${r.anuncios} anúncios, ${r.criados} criativos novos, ${r.semPar} sem par, ${r.ligados} religados.`); await recarregar(); contadores(); } catch (e) { out('#a_res', e.message, true); } };
   $('#a_sync').onclick = () => sync({ dias: Number($('#a_dias').value) });
