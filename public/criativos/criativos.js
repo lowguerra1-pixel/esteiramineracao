@@ -399,7 +399,7 @@ async function pageAjustes() {
   }
   $('#a_conectar').onclick = async () => { try { const r = await api('/api/cr/meta/conectar', { method: 'POST', body: { token: $('#a_tok').value } }); toast(`Meta conectada${r.usuario ? ' como ' + r.usuario : ''}.`); await recarregar(); pageAjustes(); } catch (e) { toast(e.message, true); } };
   $('#a_salvar').onclick = async () => { try { await api('/api/cr/config', { method: 'POST', body: { contas: $('#a_contas').value.split(',') } }); await recarregar(); toast('Contas salvas.'); } catch (e) { toast(e.message, true); } };
-  const sync = async (body) => { out('#a_res', 'sincronizando…'); try { const r = await api('/api/cr/sync', { method: 'POST', body }); out('#a_res', `${r.desde} → ${r.ate}: ${r.linhas} linhas, ${r.anuncios} anúncios, ${r.criados} criativos novos, ${r.semPar} sem par, ${r.ligados} religados.`); await recarregar(); contadores(); } catch (e) { out('#a_res', e.message, true); } };
+  const sync = async (body) => { out('#a_res', 'sincronizando…'); try { const r = await api('/api/cr/sync', { method: 'POST', body }); out('#a_res', r.segundoPlano ? `${r.desde} → ${r.ate}: ${r.aviso}` : `${r.desde} → ${r.ate}: ${r.linhas} linhas, ${r.anuncios} anúncios, ${r.criados} criativos novos, ${r.semPar} sem par, ${r.ligados} religados.`); await recarregar(); contadores(); } catch (e) { out('#a_res', e.message, true); } };
   $('#a_sync').onclick = () => sync({ dias: Number($('#a_dias').value) });
   $('#a_hist').onclick = async () => {
     const ate = $('#a_ate').value; if (!ate) return toast('Escolha a data final.', true);
