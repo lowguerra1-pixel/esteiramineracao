@@ -80,3 +80,10 @@ Base: `https://esteiramineracao.netlify.app/api/cr`. Tudo em JSON. Erros vêm co
 3. **Revisor (mesmo chat ou humano)**: dá `score`; aprova (`aprovado`) ou devolve (`briefing` com `nota`).
 4. **Produção**: produz, renomeia o card para o nome final (`novoId`), sobe no Meta com esse nome, marca `no_ar`.
 5. **Motor (automático)**: 72h depois decide; vencedor abre filhos; Analista do dia seguinte já lê o resultado.
+
+## Diretor de Copy + Revisor (automático)
+
+- A cada hora (06h–22h), se houver cards em `fila`, o Diretor de Copy escreve até 8 por rodada: `angulo`, `mecanismo`, `hook`, `body`, `formato` e `copy` (texto do anúncio + HEADLINE + ROTEIRO/ARTE + POR QUE), modelando o `paiId` e lendo pesquisa da oferta (`ofertas.notas`), vencedores, mortos recentes, hipóteses do Analista e dissecações. Método: skill James.
+- O Revisor pontua (`score` 0–10) e devolve ajustes; nota < 6 gera uma reescrita. O card vai para `revisao` com a nota no histórico e em `/aprendizados` (`autor: revisor`).
+- Você aprova em `revisao → aprovado` (gestor) ou devolve para `briefing` com nota; cards em `briefing` não são reescritos pelo agente — é o seu espaço (ou do chat do James).
+- `POST /copy` (gestor) roda agora. Cole a **pesquisa da oferta** em `ofertas.notas` (avatar, promessa, mecanismo, objeções): é o que o agente lê como "conhecimento da oferta".
