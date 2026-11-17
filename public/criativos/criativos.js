@@ -1,29 +1,58 @@
-// App Criativos: a base de criativos da operação, o kanban de 72h, o painel e as regras de veredito.
-// Mesmo login, mesma API e mesmo visual dos outros apps.
+// App Criativos — front. Especificação: docs/criativos-front-spec.md. API: docs/criativos-api.md.
+// HTML/CSS/JS puro, mesmo login dos outros apps (token em localStorage 'esteira.token').
 
-const S = { token: localStorage.getItem('esteira.token') || '', user: null, d: null, f: { oferta: '', busca: '', tipo: '' }, ord: { k: 'd7.receita', dir: -1 } };
-const STATUS_NOME = { fila: 'Fila', briefing: 'Briefing', producao: 'Produção', revisao: 'Revisão', aprovado: 'Aprovado', no_ar: 'No ar (72h)', meio: 'Veredito: variar', vencedor: 'Vencedor', fadiga: 'Fadiga', morto: 'Morto' };
+const LIQUIDO = 0.91; // receita líquida após a taxa da Lastlink
+const ATUALIZA_MS = 60_000;
+const S = {
+  token: lsGet('esteira.token'), user: null, d: null,
+  f: { periodo: '7', oferta: '', tipo: '', busca: '', status: '', ofertasBoard: [], ocultarMortos: true },
+  ord: { k: 'd7.receita', dir: -1 }, aprovSel: null, feed: null, evolucao: {},
+};
+const STATUS_NOME = { fila: 'Fila', briefing: 'Briefing', producao: 'Produção', revisao: 'Revisão', aprovado: 'Aprovado', no_ar: 'No ar', meio: 'Variar', vencedor: 'Vencedor', fadiga: 'Fadiga', morto: 'Morto' };
 const ESTADO_NOME = { validacao: 'Validação', escalando: 'Escalando', em_risco: 'Em risco', pausada: 'Pausada', encerrada: 'Encerrada' };
 const TIPO_NOME = { modelagem: 'Modelagem', variacao: 'Variação', zero: 'Do zero' };
 const FORMATOS = ['IMG', 'VID', 'UGC', 'CAR'];
+const LEVA_NOME = { planejada: 'Planejada', producao: 'Produção', no_ar: 'No ar', encerrada: 'Encerrada' };
+const RODANDO = ['no_ar', 'meio', 'vencedor', 'fadiga'];
+const PRODUCAO = ['fila', 'briefing', 'producao', 'revisao', 'aprovado'];
 const PROXIMO = { fila: ['briefing'], briefing: ['producao', 'revisao'], producao: ['revisao'], revisao: ['aprovado', 'briefing'], aprovado: ['no_ar', 'producao'], no_ar: ['vencedor', 'meio', 'morto'], meio: ['no_ar', 'morto', 'vencedor'], vencedor: ['fadiga', 'morto'], fadiga: ['vencedor', 'morto'], morto: ['fila'] };
+const PEDE_NOTA = ['briefing', 'morto'];
 
-// ---------------------------------------------------------------- utils
+// ---------------------------------------------------------------- utilidades
+function lsGet(k) { try { return localStorage.getItem(k) || ''; } catch { return ''; } }
+function lsSet(k, v) { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch { /* sem storage */ } }
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const opts = (list, sel, ph) => (ph !== undefined ? `<option value="">${esc(ph)}</option>` : '') + list.map((o) => { const [v, t] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(v)}" ${v === sel ? 'selected' : ''}>${esc(t)}</option>`; }).join('');
+const opts = (list, sel, ph) => (ph !== undefined ? `<option value="">${esc(ph)}</option>` : '') + list.map((o) => { const [v, t] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(v)}" ${String(v) === String(sel ?? '') ? 'selected' : ''}>${esc(t)}</option>`; }).join('');
 const hoje = () => new Date().toLocaleDateString('en-CA');
-const fmtData = (iso) => (iso ? String(iso).slice(0, 10).split('-').reverse().join('/') : '');
-const fmtDH = (iso) => (iso ? new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '');
-const fmtN = (v, d = 1) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? '—' : Number(v).toLocaleString('pt-BR', { maximumFractionDigits: d, minimumFractionDigits: d }));
-const fmtR = (v) => (v === null || v === undefined ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 0 }));
+const fmtData = (iso) => (iso ? String(iso).slice(0, 10).split('-').reverse().join('/') : '—');
+const fmtDH = (iso) => (iso ? new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—');
+const fmtH = (iso) => (iso ? new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—');
+const ok = (v) => v !== null && v !== undefined && Number.isFinite(Number(v));
+const fmtN = (v, d = 1) => (ok(v) ? Number(v).toLocaleString('pt-BR', { maximumFractionDigits: d, minimumFractionDigits: d }) : '—');
+const fmtI = (v) => (ok(v) ? Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 0 }) : '—');
+const fmtR = (v) => (ok(v) ? 'R$ ' + Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 0 }) : '—');
+const fmtRoas = (v) => (ok(v) ? Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—');
 const get = (o, path) => path.split('.').reduce((a, k) => (a == null ? a : a[k]), o);
 const dias = (iso) => (iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 864e5) : null);
+const horas = (iso) => (iso ? (Date.now() - new Date(iso).getTime()) / 36e5 : null);
 const norm = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-const roasCls = (r, R) => (r === null || r === undefined ? '' : r >= (R?.roasSegue ?? 1.3) ? 'good' : r < (R?.roasMorre ?? 1) ? 'bad' : '');
+const info = (t) => `<span class="i" title="${esc(t)}">i</span>`;
+const admin = () => S.user?.papel === 'admin';
+const oferta = (id) => S.d.ofertas.find((o) => o.id === id);
+const criativo = (id) => S.d.criativos.find((c) => c.id === id);
+const enc = encodeURIComponent;
+const roasCls = (r) => { const R = S.d.regras; return !ok(r) ? '' : r >= R.roasSegue ? 'verde' : r < R.roasMorre ? 'verm' : 'amar'; };
+const notaCls = (n) => (!ok(n) ? '' : n >= 8 ? 'n8' : n >= 6 ? 'n6' : 'n0');
+const chipTipo = (t) => (t ? `<span class="chip t-${t}">${TIPO_NOME[t] || t}</span>` : '');
+const chipSt = (s) => `<span class="chip ${s}">${STATUS_NOME[s] || s}</span>`;
+const chipEst = (e) => `<span class="chip ${e}">${ESTADO_NOME[e] || e}</span>`;
 
-function toast(msg, erro = false) { const t = $('#toast'); t.textContent = msg; t.className = 'show' + (erro ? ' erro' : ''); clearTimeout(toast.h); toast.h = setTimeout(() => (t.className = ''), erro ? 6000 : 3200); }
+function toast(msg, erro = false) {
+  const t = document.createElement('div'); t.className = 'toast' + (erro ? ' erro' : ''); t.textContent = msg;
+  $('#toasts').appendChild(t); setTimeout(() => t.remove(), erro ? 7000 : 3500);
+}
 async function api(path, { method = 'GET', body } = {}) {
   const r = await fetch(path, { method, headers: { ...(body ? { 'content-type': 'application/json' } : {}), ...(S.token ? { authorization: 'Bearer ' + S.token } : {}) }, body: body ? JSON.stringify(body) : undefined });
   const j = await r.json().catch(() => ({}));
@@ -31,172 +60,534 @@ async function api(path, { method = 'GET', body } = {}) {
   if (!r.ok) throw new Error(j.erro || `Erro ${r.status}`);
   return j;
 }
-function sair() { S.token = ''; S.user = null; localStorage.removeItem('esteira.token'); renderLogin(); }
-const oferta = (id) => S.d.ofertas.find((o) => o.id === id);
-const criativo = (id) => S.d.criativos.find((c) => c.id === id);
+// Ação com toast de erro, sem travar a tela.
+async function acao(fn, msgOk) { try { const r = await fn(); if (msgOk) toast(msgOk); return r; } catch (e) { toast(e.message, true); return undefined; } }
 async function recarregar() { S.d = await api('/api/cr/bootstrap'); }
+
+// ---------------------------------------------------------------- derivados (seção 1 da spec)
+const daOferta = (lista) => (S.f.oferta ? lista.filter((c) => c.ofertaId === S.f.oferta) : lista);
+const janela = () => (S.f.periodo === '30' ? 'd30' : 'd7');
+const soma = (lista, campo, jan = janela()) => lista.reduce((a, c) => a + (Number(c[jan]?.[campo]) || 0), 0);
+function numeros(ofertaId = S.f.oferta) {
+  const cs = ofertaId ? S.d.criativos.filter((c) => c.ofertaId === ofertaId) : S.d.criativos;
+  const p = S.d.painel, jan = janela();
+  const gasto = soma(cs, 'gasto', jan);
+  let receita;
+  if (jan === 'd7') receita = ofertaId ? (p.porOferta.find((o) => o.id === ofertaId)?.receita7 ?? soma(cs, 'receita', jan)) : p.receita7;
+  else receita = soma(cs, 'receita', jan);
+  const roas = gasto > 0 ? receita / gasto : null;
+  const lucro = gasto > 0 || receita > 0 ? receita * LIQUIDO - gasto : null;
+  return { gasto, receita, roas, lucro, cs };
+}
+const noAr = (lista) => lista.filter((c) => RODANDO.includes(c.status) && (c.d7?.gasto || 0) > 0);
+const mortosSemana = (lista) => lista.filter((c) => c.status === 'morto' && dias(c.statusEm) !== null && dias(c.statusEm) < 7);
+const noArHa = (c) => (c.noArEm ? dias(c.noArEm) : null);
 
 // ---------------------------------------------------------------- login
 async function renderLogin() {
-  const users = await api('/api/usuarios');
+  let users = [];
+  try { users = await api('/api/usuarios'); } catch (e) { toast(e.message, true); }
   let sel = users.find((u) => u.papel === 'admin')?.id || users[0]?.id;
-  $('#app').innerHTML = `
-  <div class="login"><div class="login-box">
-    <h1>Criativos</h1>
-    <p class="lede">A base de criativos e o kanban de 72h da operação. Mesmo acesso da Esteira.</p>
-    <div class="people">${users.map((u) => `<button class="person ${u.id === sel ? 'on' : ''}" data-id="${u.id}"><span><b>${esc(u.nome)}</b></span><small>${u.papel === 'admin' ? 'Gestor' : 'Operador'}</small></button>`).join('')}</div>
-    <form id="lf" class="stack"><label class="f"><span>PIN</span><input type="password" id="pin" inputmode="numeric" autocomplete="current-password" autofocus></label><button class="btn big">Entrar</button></form>
+  $('#app').innerHTML = `<div class="login"><div class="login-box">
+    <h1>Criativos</h1><p>A base de criativos, a fila de aprovação e o veredito de 72h. Mesmo acesso da Esteira.</p>
+    <div class="people">${users.map((u) => `<button class="person ${u.id === sel ? 'on' : ''}" data-id="${esc(u.id)}"><b>${esc(u.nome)}</b><small>${u.papel === 'admin' ? 'Gestor' : 'Operador'}</small></button>`).join('')}</div>
+    <form id="lf"><input type="password" id="pin" placeholder="PIN" inputmode="numeric" autocomplete="current-password" autofocus><button class="btn">Entrar</button></form>
   </div></div>`;
   $$('.person').forEach((b) => b.onclick = () => { sel = b.dataset.id; $$('.person').forEach((x) => x.classList.toggle('on', x === b)); $('#pin').focus(); });
   $('#lf').onsubmit = async (e) => {
     e.preventDefault();
-    try { const r = await api('/api/login', { method: 'POST', body: { id: sel, pin: $('#pin').value } }); S.token = r.token; localStorage.setItem('esteira.token', r.token); await boot(); }
+    try { const r = await api('/api/login', { method: 'POST', body: { id: sel, pin: $('#pin').value } }); S.token = r.token; lsSet('esteira.token', r.token); await boot(); }
     catch (err) { toast(err.message, true); $('#pin').select(); }
   };
 }
+function sair() { S.token = ''; S.user = null; lsSet('esteira.token', ''); fecharGaveta(); fecharModal(); renderLogin(); }
 
-// ---------------------------------------------------------------- shell
+// ---------------------------------------------------------------- casca
+const ICONES = {
+  grade: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.8 2.8L16.5 9.5"/></svg>',
+  colunas: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="5" height="16" rx="1.2"/><rect x="10" y="4" width="5" height="11" rx="1.2"/><rect x="17" y="4" width="4" height="7" rx="1.2"/></svg>',
+  etiqueta: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12V4h8l10 10-8 8L3 12Z"/><circle cx="7.5" cy="8.5" r="1.3"/></svg>',
+  tabela: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 9.5h18M3 14.5h18M9 9.5V20"/></svg>',
+  engrenagem: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>',
+};
+const ROTAS = [['', 'Visão geral', 'grade'], ['aprovar', 'Aprovar', 'check'], ['board', 'Board', 'colunas'], ['ofertas', 'Ofertas', 'etiqueta'], ['criativos', 'Criativos', 'tabela']];
+const TITULOS = { '': 'Visão geral', aprovar: 'Aprovar', board: 'Board', ofertas: 'Ofertas', criativos: 'Criativos', ajustes: 'Ajustes' };
+
 async function boot() {
   if (!S.token) return renderLogin();
-  try { S.user = (await api('/api/eu')).usuario; await recarregar(); } catch (e) { toast(e.message, true); return; }
+  try { S.user = (await api('/api/eu')).usuario; await recarregar(); }
+  catch (e) { if (S.token) { $('#app').innerHTML = `<div class="vazio"><b>Não consegui carregar os dados.</b>${esc(e.message)}<br><br><button class="btn" id="tenta">Tentar de novo</button></div>`; $('#tenta').onclick = boot; } return; }
   shell(); route();
+  clearInterval(boot.t); boot.t = setInterval(atualizar, ATUALIZA_MS);
 }
 function shell() {
-  $('#app').innerHTML = `
-  <div class="top cr">
-    <div class="brand"><a href="/" title="Voltar ao hub">Kaian Digital</a><span class="crumb">Criativos</span></div>
-    <div class="counters" id="counters"></div>
-    <span></span>
-  </div>
-  <nav class="nav">
-    <a href="#/painel" data-r="painel">Painel</a>
-    <a href="#/board" data-r="board">Board</a>
-    <a href="#/tabela" data-r="tabela">Tabela</a>
-    <a href="#/calendario" data-r="calendario">Calendário</a>
-    <a href="#/ofertas" data-r="ofertas">Ofertas</a>
-    ${S.user.papel === 'admin' ? '<a href="#/ajustes" data-r="ajustes">Ajustes</a>' : ''}
-    <span class="grow"></span>
-    <span class="who">${esc(S.user.nome)} <button class="linkbtn" id="sair">Sair</button></span>
-  </nav>
-  <main id="main"></main>`;
+  $('#app').innerHTML = `<div class="shell">
+    <nav class="menu" id="menu"></nav>
+    <div class="conteudo"><div class="topo"><h1 id="titulo"></h1><span class="grow"></span><span class="vivo" id="vivo"></span><span class="quem"><b>${esc(S.user.nome)}</b><button class="link" id="sair">Sair</button></span></div>
+    <div id="faixas"></div><main id="main"></main></div></div>`;
   $('#sair').onclick = sair;
 }
-function contadores() {
-  const p = S.d.painel;
-  const n = (st) => S.d.criativos.filter((c) => c.status === st).length;
-  $('#counters').innerHTML = `
-    <span class="${p.vencedoresSemana < p.metaVencedores ? 'alert' : ''}"><b>${p.vencedoresSemana}</b>vencedores na semana</span>
-    <span><b>${n('aprovado')}</b>pra produzir</span>
-    <span><b>${n('revisao')}</b>pra aprovar</span>
-    <span><b>${n('no_ar') + n('meio')}</b>no ar</span>`;
+function menu(r) {
+  const nRev = S.d.criativos.filter((c) => c.status === 'revisao').length;
+  const nRisco = S.d.ofertas.filter((o) => o.estado === 'em_risco').length;
+  const alerta = !S.d.meta || !S.d.ultimoSync || horas(S.d.ultimoSync.em) > 36;
+  const badge = { aprovar: nRev ? `<span class="badge verm">${nRev}</span>` : '', ofertas: nRisco ? `<span class="badge amar">${nRisco}</span>` : '' };
+  $('#menu').innerHTML = `<div class="marca"><div>Criativos<small><a href="/" style="color:inherit">Kaian Digital ↗</a></small></div></div>
+    ${ROTAS.map(([id, nome, ic]) => `<a href="#/${id}" class="${r === id ? 'on' : ''}">${ICONES[ic]}<span>${nome}</span>${badge[id] || ''}</a>`).join('')}
+    <span class="grow"></span>
+    <a href="#/ajustes" class="${r === 'ajustes' ? 'on' : ''}">${ICONES.engrenagem}<span>Ajustes</span>${alerta ? '<span class="dot" title="Meta desconectada ou sync atrasado"></span>' : ''}</a>`;
+  $('#vivo').textContent = `Ao vivo · sync ${fmtH(S.d.ultimoSync?.em)} · veredito ${fmtH(S.d.ultimoVeredito?.em)}`;
+  $('#vivo').title = `Último sync da Meta: ${fmtDH(S.d.ultimoSync?.em)} · último veredito: ${fmtDH(S.d.ultimoVeredito?.em)}`;
+  const fx = [];
+  if (!S.d.meta) fx.push(`Meta não conectada — gasto e ROAS zerados. ${admin() ? '<a href="#/ajustes">Conectar</a>' : 'Peça ao gestor para conectar.'}`);
+  else if (!S.d.ultimoSync) fx.push('A Meta ainda não foi sincronizada.');
+  else if (horas(S.d.ultimoSync.em) > 36) fx.push(`Última sincronização há ${Math.round(horas(S.d.ultimoSync.em))} h. ${admin() ? '<a href="#/ajustes">Sincronizar</a>' : ''}`);
+  $('#faixas').innerHTML = fx.map((t) => `<div class="faixa">${t}</div>`).join('');
+}
+function rota() {
+  const [path, qs = ''] = location.hash.replace(/^#\/?/, '').split('?');
+  const [r = '', arg] = path.split('/');
+  return { r, arg: arg ? decodeURIComponent(arg) : '', q: new URLSearchParams(qs) };
 }
 function route() {
-  if (!S.user) return;
-  const [, r = 'painel', arg] = location.hash.split('/');
-  $$('.nav a').forEach((a) => a.classList.toggle('active', a.dataset.r === r));
-  contadores(); window.scrollTo({ top: 0 });
-  if (r === 'board') return pageBoard();
-  if (r === 'tabela') return pageTabela();
-  if (r === 'calendario') return pageCalendario();
-  if (r === 'ofertas') return pageOfertas();
-  if (r === 'ajustes' && S.user.papel === 'admin') return pageAjustes();
-  if (r === 'c' && arg) { pagePainel(); return abrirFicha(decodeURIComponent(arg)); }
-  return pagePainel();
+  if (!S.user || !S.d) return;
+  const { r, arg, q } = rota();
+  menu(r); $('#titulo').textContent = arg && r === 'ofertas' ? (oferta(arg)?.nome || arg) : TITULOS[r] ?? 'Visão geral';
+  if (r === 'aprovar') return pageAprovar();
+  if (r === 'board') { if (q.get('oferta')) S.f.ofertasBoard = [q.get('oferta')]; return pageBoard(); }
+  if (r === 'ofertas') return arg ? pageOferta(arg) : pageOfertas();
+  if (r === 'criativos') return pageCriativos();
+  if (r === 'ajustes') return pageAjustes();
+  return pageVisao();
 }
-window.addEventListener('hashchange', route);
+window.addEventListener('hashchange', () => { window.scrollTo({ top: 0 }); route(); });
 
-// ---------------------------------------------------------------- filtros comuns
-function filtrados() {
-  const f = S.f;
-  return S.d.criativos.filter((c) => (!f.oferta || c.ofertaId === f.oferta) && (!f.tipo || c.tipo === f.tipo) && (!f.busca || norm(c.id + ' ' + (c.angulo || '') + ' ' + (c.hook || '')).includes(norm(f.busca))));
-}
-function barraFiltros(extra = '') {
-  return `<div class="filtros">
-    <select id="f_oferta">${opts(S.d.ofertas.map((o) => [o.id, o.nome]), S.f.oferta, 'Todas as ofertas')}</select>
-    <select id="f_tipo">${opts(Object.entries(TIPO_NOME), S.f.tipo, 'Todos os tipos')}</select>
-    <input type="text" id="f_busca" placeholder="Buscar ID, ângulo, hook…" value="${esc(S.f.busca)}">
-    ${extra}
-    <span class="grow"></span>
-    <button class="btn small" id="novo">+ Criativo</button>
-  </div>`;
-}
-function bindFiltros(render) {
-  $('#f_oferta').onchange = (e) => { S.f.oferta = e.target.value; render(); };
-  $('#f_tipo').onchange = (e) => { S.f.tipo = e.target.value; render(); };
-  $('#f_busca').oninput = (e) => { S.f.busca = e.target.value; clearTimeout(bindFiltros.h); bindFiltros.h = setTimeout(render, 200); };
-  $('#novo').onclick = () => novoCriativo();
+// A cada 60 s: recarrega e redesenha, se ninguém estiver digitando nem com ficha/modal aberto.
+async function atualizar() {
+  if (!S.user || document.hidden) return;
+  try { await recarregar(); } catch { return; }
+  const ocupado = $('.gaveta') || $('.modal') || ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
+  if (ocupado) menu(rota().r); else route();
 }
 
-// ---------------------------------------------------------------- painel
-function pagePainel() {
+// Clique em qualquer coisa com data-ficha abre a ficha lateral.
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-ficha]');
+  if (el && !e.defaultPrevented) { e.preventDefault(); abrirFicha(el.dataset.ficha); }
+});
+
+// ---------------------------------------------------------------- 3. Visão geral
+function pageVisao() {
   const p = S.d.painel, R = S.d.regras;
-  const kpi = (v, l, cls = '', sub = '') => `<div class="kpi ${cls}"><div class="v">${v}${sub ? `<small>${sub}</small>` : ''}</div><div class="l">${l}</div></div>`;
+  const n = numeros();
+  const todos = daOferta(S.d.criativos);
+  const vs = p.vencedoresSemana, meta = p.metaVencedores || 5;
+  const corV = vs >= meta ? 'verde' : vs >= 3 ? 'amar' : 'verm';
+  const corR = !ok(n.roas) ? '' : n.roas >= 1.45 ? 'verde' : n.roas >= 1.3 ? 'amar' : 'verm';
+  const per = S.f.periodo === '30' ? '30 dias' : '7 dias';
+  const share = p.shareMaior;
+  const top = [...p.porOferta].sort((a, b) => b.receita7 - a.receita7).slice(0, 3);
+  const medalha = ['🥇', '🥈', '🥉'];
   $('#main').innerHTML = `
-  <div class="head"><div><h1>Painel</h1><div class="muted">A métrica-mãe é a primeira: ela antecipa a receita em 30 dias. Semana = últimos 7 dias.</div></div>
-    <div class="row"><span class="small muted">${S.d.ultimoSync ? `Meta sincronizada ${fmtDH(S.d.ultimoSync.em)}` : 'Meta ainda não sincronizada'} · ${S.d.ultimoVeredito ? `veredito ${fmtDH(S.d.ultimoVeredito.em)}` : 'veredito ainda não rodou'}</span></div></div>
-  <div class="kpis">
-    ${kpi(p.vencedoresSemana, 'criativos vencedores novos na semana', p.vencedoresSemana >= p.metaVencedores ? 'ok' : p.vencedoresSemana >= 3 ? 'warn' : 'bad', `meta ${p.metaVencedores}`)}
-    ${kpi(p.ofertasAcima5k, 'ofertas acima de R$ 5 mil na semana', p.ofertasAcima5k >= p.metaOfertas ? 'ok' : p.ofertasAcima5k >= 3 ? 'warn' : 'bad', `meta ${p.metaOfertas}`)}
-    ${kpi(p.shareMaior ? p.shareMaior.pct + '%' : '—', p.shareMaior ? `da receita vem de ${esc(oferta(p.shareMaior.oferta)?.nome || p.shareMaior.oferta)}` : 'share da maior oferta', p.shareMaior ? (p.shareMaior.pct < 40 ? 'ok' : p.shareMaior.pct <= 55 ? 'warn' : 'bad') : '', 'limite 40%')}
-    ${kpi(fmtR(p.receita7), 'receita rastreada na semana (vendas com criativo)')}
+  <div class="filtros">
+    <div class="seg" id="per">${[['hoje', 'Hoje'], ['7', '7 dias'], ['30', '30 dias']].map(([v, t]) => `<button data-v="${v}" class="${(S.f.periodo === v || (v === 'hoje' && S.f.periodo === 'hoje')) ? 'on' : ''}">${t}</button>`).join('')}</div>
+    <select id="f_of">${opts(S.d.ofertas.map((o) => [o.id, o.nome]), S.f.oferta, 'Todas as ofertas')}</select>
+    ${S.f.periodo === 'hoje' ? '<span class="fraco" style="font-size:12.5px">"Hoje" mostra os números de 7 dias; o dia a dia aparece ao abrir um criativo.</span>' : ''}
   </div>
-  <div class="panel"><header><h2>Ofertas</h2><span class="small muted">regras: veredito em ${R.horasVeredito}h · segue ≥ ${R.roasSegue} · morre &lt; ${R.roasMorre} · vencedor com ${R.vencedorVendas} vendas</span></header>
-    <div class="ofrow h"><span>Oferta</span><span>Estado</span><span>Receita 7d</span><span>No ar</span><span>Vencedores</span><span>Na fila</span><span>Último vencedor</span><span>Próxima leva</span></div>
-    ${p.porOferta.map((o) => `<div class="ofrow">
-      <span><b class="nome"><a href="#/board" data-of="${o.id}">${esc(o.nome)}</a></b><span class="small muted">${o.id}</span></span>
-      <span><span class="est ${o.estado}">${ESTADO_NOME[o.estado]}</span></span>
-      <span class="n">${fmtR(o.receita7)} <span class="small muted">${o.receitaSemanaAnterior ? (o.receita7 >= o.receitaSemanaAnterior ? '▲' : '▼') + Math.abs(Math.round(((o.receita7 - o.receitaSemanaAnterior) / o.receitaSemanaAnterior) * 100)) + '%' : ''}</span></span>
-      <span class="n">${o.rodando}</span><span class="n">${o.vencedores}</span><span class="n">${o.emFila}</span>
-      <span class="${o.diasSemVencedor !== null && o.diasSemVencedor >= R.diasRisco ? 'muted' : ''}" style="${o.diasSemVencedor !== null && o.diasSemVencedor >= R.diasRisco ? 'color:var(--erro)' : ''}">${o.diasSemVencedor === null ? 'nunca' : o.diasSemVencedor + ' dias atrás'}</span>
-      <span>${o.proximaLeva ? `<a href="#/calendario">${fmtData(o.proximaLeva.data)} · ${esc(o.proximaLeva.id)}</a>` : '<span class="muted">não planejada</span>'}</span>
-    </div>`).join('') || '<div class="ofrow"><span class="muted">Cadastre as ofertas em Ofertas.</span></div>'}
+  <div class="g4">
+    <div class="card big"><div class="cap">Vencedores novos na semana${info('Criativos que viraram vencedor nos últimos 7 dias (regra: ' + R.vencedorVendas + '+ vendas com ROAS ≥ ' + R.roasSegue + ')')}</div>
+      <div class="v ${corV}">${vs}</div><div class="sub">meta ≥ ${meta}</div><div class="barra"><i style="width:${Math.min(100, (vs / meta) * 100)}%;background:var(--${corV === 'verde' ? 'verde' : corV === 'amar' ? 'amar' : 'verm'})"></i></div></div>
+    <div class="card big"><div class="cap">Receita rastreada${info('Lastlink, vendas aprovadas sem reembolso, ligadas a um criativo · ' + per)}</div>
+      <div class="v">${fmtR(n.receita)}</div><div class="sub">Lastlink · vendas ligadas a criativo</div></div>
+    <div class="card big"><div class="cap">Gasto em ads${info('Meta Ads, contas ativas · ' + per)}</div>
+      <div class="v">${S.d.meta ? fmtR(n.gasto) : '—'}</div><div class="sub">Meta Ads · contas ativas</div></div>
+    <div class="card big"><div class="cap">ROAS${info('Receita rastreada ÷ gasto · lucro ≈ receita × ' + LIQUIDO + ' − gasto')}</div>
+      <div class="v ${corR}">${fmtRoas(n.roas)}</div><div class="sub">lucro ≈ <span class="${ok(n.lucro) ? (n.lucro >= 0 ? 'verde' : 'verm') : ''}">${fmtR(n.lucro)}</span></div></div>
+  </div>
+  <div class="card regua">
+    <div><div class="cap">No ar${info('Rodando (no ar, variar, vencedor, fadiga) com gasto nos últimos 7 dias')}</div><div class="v">${noAr(todos).length}</div></div>
+    <div><a href="#/aprovar"><div class="cap">Em revisão</div><div class="v">${todos.filter((c) => c.status === 'revisao').length}</div></a></div>
+    <div><div class="cap">Aprovados pra produzir</div><div class="v">${todos.filter((c) => c.status === 'aprovado').length}</div></div>
+    <div><div class="cap">Mortos na semana</div><div class="v">${mortosSemana(todos).length}</div></div>
+    <div><div class="cap">Share da maior oferta${info('Lastlink, receita 7d da maior oferta ÷ receita 7d total')}</div><div class="v ${share && share.pct > 55 ? 'verm' : ''}">${share ? share.pct + '%' : '—'}</div><div class="fraco" style="font-size:12px">${share ? esc(oferta(share.oferta)?.nome || share.oferta) : ''}</div></div>
+  </div>
+  <div class="secao"><h2>Top 3 ofertas em destaque</h2><a href="#/ofertas" style="font-size:13px">Todas as ofertas →</a></div>
+  <div class="top3">${top.map((o, i) => {
+    const cs = S.d.criativos.filter((c) => c.ofertaId === o.id);
+    const g = soma(cs, 'gasto', 'd7'), roas = g > 0 ? o.receita7 / g : null;
+    const varr = o.receitaSemanaAnterior ? Math.round(((o.receita7 - o.receitaSemanaAnterior) / o.receitaSemanaAnterior) * 100) : null;
+    return `<div class="card"><h3>${medalha[i]} ${esc(o.nome)} ${chipEst(o.estado)}</h3>
+      <div class="mini">
+        <div><div class="cap">Receita 7d</div><div class="v">${fmtR(o.receita7)} ${varr !== null ? `<small class="${varr >= 0 ? 'verde' : 'verm'}" style="font-size:12px">${varr >= 0 ? '▲' : '▼'}${Math.abs(varr)}%</small>` : ''}</div></div>
+        <div><div class="cap">Gasto 7d</div><div class="v">${fmtR(g)}</div></div>
+        <div><div class="cap">ROAS</div><div class="v ${roasCls(roas)}">${fmtRoas(roas)}</div></div>
+        <div><div class="cap">Vencedores vivos</div><div class="v">${o.vencedores}</div></div>
+      </div>
+      <div class="row"><a class="btn ghost sm" href="#/board?oferta=${enc(o.id)}">Board</a><a class="btn ghost sm" href="#/ofertas/${enc(o.id)}">Leva ${o.proximaLeva ? '· ' + fmtData(o.proximaLeva.data) : ''}</a></div></div>`;
+  }).join('') || '<div class="card fraco">Nenhuma oferta com receita ainda.</div>'}</div>
+  <div class="duo">
+    <div class="card"><header><h2>Evolução da operação</h2><span class="grow"></span><div class="legenda"><span><i style="background:var(--verde)"></i>Receita</span><span><i style="background:var(--fraco)"></i>Gasto</span><span><i style="background:#2EE59D66;height:8px"></i>Lucro</span></div></header>
+      <div id="evo"><div class="vazio" style="padding:60px 20px">30 dias, somando os criativos com gasto${S.f.oferta ? ' desta oferta' : ''}.<br><br><button class="btn ghost" id="verEvo">Ver evolução</button></div></div></div>
+    <div class="card"><header><h2>Últimos vereditos</h2></header><div class="feed" id="feed"><div class="fraco">carregando…</div></div></div>
   </div>`;
-  $$('[data-of]').forEach((a) => a.onclick = () => { S.f.oferta = a.dataset.of; });
+  $$('#per button').forEach((b) => b.onclick = () => { S.f.periodo = b.dataset.v; pageVisao(); });
+  $('#f_of').onchange = (e) => { S.f.oferta = e.target.value; pageVisao(); };
+  $('#verEvo').onclick = desenharEvolucao;
+  if (S.evolucao[S.f.oferta || '*'] && Date.now() - S.evolucao[S.f.oferta || '*'].em < 600_000) desenharEvolucao();
+  carregarFeed();
+}
+async function carregarFeed() {
+  try {
+    if (!S.feed || Date.now() - S.feed.em > 60_000) S.feed = { em: Date.now(), rows: await api('/api/cr/aprendizados') };
+    const rows = S.feed.rows.filter((a) => ['veredito', 'analista'].includes(a.autor)).filter((a) => !S.f.oferta || a.oferta_id === S.f.oferta).slice(0, 12);
+    const ic = { veredito: '⚖️', hipotese: '💡', nota: '📝', dissecacao: '🔬' };
+    const el = $('#feed'); if (!el) return;
+    el.innerHTML = rows.map((a) => `<div><span class="ic">${ic[a.tipo] || '•'}</span><span>${esc(String(a.texto).slice(0, 180))}${String(a.texto).length > 180 ? '…' : ''}
+      <small>${esc(a.oferta_id || '')}${a.criativo_id ? ` · <a href="#" data-ficha="${esc(a.criativo_id)}">${esc(a.criativo_id)}</a>` : ''} · ${fmtDH(a.criado_em)}</small></span></div>`).join('') || '<div class="fraco" style="grid-template-columns:1fr">Nenhum veredito ainda. O motor roda às 06:10.</div>';
+  } catch (e) { const el = $('#feed'); if (el) el.innerHTML = `<div class="fraco">${esc(e.message)}</div>`; }
+}
+async function desenharEvolucao() {
+  const k = S.f.oferta || '*';
+  const el = $('#evo'); if (!el) return;
+  let cache = S.evolucao[k];
+  if (!cache || Date.now() - cache.em > 600_000) {
+    const cs = daOferta(S.d.criativos).filter((c) => (c.d30?.gasto || 0) > 0).sort((a, b) => b.d30.gasto - a.d30.gasto).slice(0, 40);
+    if (!cs.length) { el.innerHTML = '<div class="vazio">Sem gasto nos últimos 30 dias.</div>'; return; }
+    el.innerHTML = `<div class="carregando">somando ${cs.length} criativos…</div>`;
+    const series = await Promise.all(cs.map((c) => api(`/api/cr/criativos/${enc(c.id)}/serie`).catch(() => [])));
+    const ini = new Date(); ini.setDate(ini.getDate() - 29);
+    const diasL = Array.from({ length: 30 }, (_, i) => { const d = new Date(ini); d.setDate(ini.getDate() + i); return d.toLocaleDateString('en-CA'); });
+    const por = Object.fromEntries(diasL.map((d) => [d, { receita: 0, gasto: 0 }]));
+    for (const s of series) for (const r of s) if (por[r.dia]) { por[r.dia].receita += Number(r.receita) || 0; por[r.dia].gasto += Number(r.gasto) || 0; }
+    cache = S.evolucao[k] = { em: Date.now(), n: cs.length, pts: diasL.map((d) => ({ dia: d, ...por[d], lucro: por[d].receita * LIQUIDO - por[d].gasto })) };
+  }
+  if (!$('#evo')) return;
+  $('#evo').innerHTML = graficoLinhas(cache.pts) + `<div class="fraco" style="font-size:11.5px;margin-top:6px">Soma dos ${cache.n} criativos com mais gasto em 30 dias · Meta Ads + Lastlink · atualiza a cada 10 min</div>`;
+}
+function graficoLinhas(pts) {
+  const W = 760, H = 240, pl = 54, pr = 10, pt = 10, pb = 26;
+  const vals = pts.flatMap((p) => [p.receita, p.gasto, p.lucro]);
+  const max = Math.max(1, ...vals), min = Math.min(0, ...vals);
+  const x = (i) => pl + (i / (pts.length - 1)) * (W - pl - pr);
+  const y = (v) => pt + (1 - (v - min) / (max - min)) * (H - pt - pb);
+  const linha = (k) => pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p[k]).toFixed(1)}`).join('');
+  const area = `${linha('lucro')}L${x(pts.length - 1)},${y(0)}L${x(0)},${y(0)}Z`;
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => min + t * (max - min));
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    ${ticks.map((t) => `<line x1="${pl}" x2="${W - pr}" y1="${y(t)}" y2="${y(t)}" stroke="#242A33"/><text x="${pl - 6}" y="${y(t) + 4}" fill="#8B95A3" font-size="10" text-anchor="end">${Math.round(t / 1000) ? (t / 1000).toFixed(1) + 'k' : Math.round(t)}</text>`).join('')}
+    <path d="${area}" fill="#2EE59D22"/>
+    <path d="${linha('gasto')}" fill="none" stroke="#8B95A3" stroke-width="1.6"/>
+    <path d="${linha('receita')}" fill="none" stroke="#2EE59D" stroke-width="2.2"/>
+    ${pts.map((p, i) => (i % 5 === 0 || i === pts.length - 1 ? `<text x="${x(i)}" y="${H - 8}" fill="#8B95A3" font-size="10" text-anchor="middle">${p.dia.slice(8, 10)}/${p.dia.slice(5, 7)}</text>` : '')).join('')}
+    ${pts.map((p, i) => `<rect x="${x(i) - 6}" y="${pt}" width="12" height="${H - pt - pb}" fill="transparent"><title>${fmtData(p.dia)} · receita ${fmtR(p.receita)} · gasto ${fmtR(p.gasto)} · lucro ${fmtR(p.lucro)}</title></rect>`).join('')}
+  </svg>`;
 }
 
-// ---------------------------------------------------------------- board
-function pageBoard() {
-  $('#main').innerHTML = `<div class="head"><div><h1>Board</h1><div class="muted">Um card por criativo. Clique pra ver métricas, mover de coluna, aprovar ou devolver.</div></div></div>${barraFiltros()}<div class="board" id="board"></div>`;
-  bindFiltros(renderBoard); renderBoard();
+// ---------------------------------------------------------------- 4. Aprovar
+const emRevisao = () => S.d.criativos.filter((c) => c.status === 'revisao').sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || String(a.statusEm).localeCompare(String(b.statusEm)));
+function notaRevisor(c) {
+  const h = [...(c.historico || [])].reverse().find((x) => x.por === 'revisor' && x.nota);
+  if (!h) return ok(c.score) ? { n: c.score } : null;
+  const t = String(h.nota).replace(/^Revisor:\s*/i, '');
+  const m = t.match(/(\d+(?:[.,]\d+)?)\s*\/\s*10/);
+  const resto = t.replace(/^.*?\/\s*10\s*[—-]?\s*/, '');
+  const [motivos, ajustes] = resto.split(/\s*·\s*ajustes:\s*/i);
+  return { n: m ? Number(m[1].replace(',', '.')) : c.score, motivos, ajustes, em: h.em };
 }
-function cardHtml(c) {
-  const R = S.d.regras, T = c.total, D = c.d7;
-  const m = ['no_ar', 'meio', 'vencedor', 'fadiga'].includes(c.status)
-    ? `<span>7d <b class="${roasCls(D.roas, R)}">${D.roas ?? '—'}</b></span><span>total <b class="${roasCls(T.roas, R)}">${T.roas ?? '—'}</b></span><span><b>${T.vendas}</b> v</span><span>${fmtR(T.gasto)}</span>`
-    : `<span class="muted">${c.paiId ? 'de ' + esc(c.paiId) : (c.angulo || c.hook || '')}</span>`;
-  return `<div class="ccard" data-id="${esc(c.id)}"><div class="id">${esc(c.id)}</div><div class="m"><span class="tipo ${c.tipo}">${TIPO_NOME[c.tipo]}</span>${c.formato ? `<span>${esc(c.formato)}</span>` : ''}<span>${esc(c.ofertaId)}</span></div><div class="m">${m}</div></div>`;
+function pageAprovar() {
+  const lista = emRevisao();
+  const variar = S.d.criativos.filter((c) => c.status === 'meio');
+  if (!lista.find((c) => c.id === S.aprovSel)) S.aprovSel = lista[0]?.id || null;
+  $('#main').innerHTML = `<div class="aprovar">
+    <div>
+      <div class="card lista">${lista.map((c) => `<button class="item ${c.id === S.aprovSel ? 'on' : ''}" data-sel="${esc(c.id)}">
+        <div class="id"><span>${esc(c.id)}</span>${ok(c.score) ? `<span class="nota ${notaCls(c.score)}">${fmtN(c.score, c.score % 1 ? 1 : 0)}</span>` : ''}</div>
+        <div class="m"><span class="chip">${esc(c.ofertaId)}</span>${chipTipo(c.tipo)}${c.formato ? `<span class="chip f">${esc(c.formato)}</span>` : ''}</div></button>`).join('') || '<div class="vazio" style="padding:30px 10px"><b>Nada pra aprovar.</b>O Diretor de Copy roda a cada hora; a próxima leva nasce às 06:10.</div>'}</div>
+      <details class="dobra card" ${variar.length ? '' : ''}><summary>Pede variação <span class="badge amar" style="display:inline-grid;margin-left:6px">${variar.length}</span></summary>
+        ${variar.map((c) => `<div class="item" style="cursor:default"><div class="id"><a href="#" data-ficha="${esc(c.id)}" style="color:inherit">${esc(c.id)}</a><span class="${roasCls(c.d7.roas)} num" style="font-size:12px">ROAS 7d ${fmtRoas(c.d7.roas)}</span></div>
+          <div class="row" style="margin-top:8px"><button class="btn sm" data-variar="${esc(c.id)}">Criar variação</button><button class="btn ghost sm" data-matar="${esc(c.id)}">Matar</button></div></div>`).join('') || '<div class="fraco" style="padding:6px">Nenhum criativo pedindo variação.</div>'}
+      </details>
+    </div>
+    <div class="card det" id="det">${lista.length ? '' : '<div class="vazio"><b>Fila limpa ✓</b>Quando o Revisor terminar uma rodada, os cards aparecem aqui.</div>'}</div>
+  </div>`;
+  $$('[data-sel]').forEach((b) => b.onclick = () => { S.aprovSel = b.dataset.sel; $$('[data-sel]').forEach((x) => x.classList.toggle('on', x === b)); detalheAprovar(); });
+  $$('[data-variar]').forEach((b) => b.onclick = () => { const c = criativo(b.dataset.variar); const leva = S.d.levas.filter((l) => l.ofertaId === c.ofertaId && l.status === 'planejada').sort((a, b2) => String(a.planejada).localeCompare(String(b2.planejada)))[0]; novoCriativo({ ofertaId: c.ofertaId, tipo: 'variacao', paiId: c.id, levaId: leva?.id || '', formato: c.formato, angulo: c.angulo }); });
+  $$('[data-matar]').forEach((b) => b.onclick = () => mover(b.dataset.matar, 'morto'));
+  if (S.aprovSel) detalheAprovar();
+}
+function detalheAprovar() {
+  const c = criativo(S.aprovSel); const el = $('#det'); if (!c || !el) return;
+  const pai = c.paiId ? criativo(c.paiId) : null;
+  const rv = notaRevisor(c);
+  const bloco = (t, v, cls = '') => `<div class="bloco"><div class="cap">${t}</div><div class="txt ${cls}">${v ? esc(v) : '<span class="fraco">—</span>'}</div></div>`;
+  el.innerHTML = `
+    <div class="cab"><input class="ided" id="ap_id" value="${esc(c.id)}" title="Nome do anúncio no Meta — edite e tecle Enter para renomear"></div>
+    <div class="meta"><span class="chip">${esc(oferta(c.ofertaId)?.nome || c.ofertaId)}</span>${chipTipo(c.tipo)}${c.formato ? `<span class="chip f">${esc(c.formato)}</span>` : ''}${c.levaId ? `<span class="chip">${esc(c.levaId)}</span>` : ''}<a href="#" data-ficha="${esc(c.id)}" style="margin-left:auto;font-size:12.5px">Abrir ficha completa</a></div>
+    ${c.paiId ? `<div class="pai"><span class="cap">Criativo-pai</span><a href="#" data-ficha="${esc(c.paiId)}"><b>${esc(c.paiId)}</b></a>${pai ? `<span>ROAS total <b class="${roasCls(pai.total.roas)}">${fmtRoas(pai.total.roas)}</b></span><span><b>${fmtI(pai.total.vendas)}</b> vendas</span>${chipSt(pai.status)}` : '<span class="fraco">não encontrado na base</span>'}</div>` : ''}
+    ${rv ? `<div class="revisor"><div class="n ${rv.n >= 8 ? 'verde' : rv.n >= 6 ? 'amar' : 'verm'}">${fmtN(rv.n, rv.n % 1 ? 1 : 0)}<small>/10</small></div><div><div class="cap">Nota do Revisor</div>${rv.motivos ? `<div style="margin-top:4px">${esc(rv.motivos)}</div>` : ''}${rv.ajustes ? `<div class="fraco" style="margin-top:6px;font-size:13px"><b style="color:var(--amar)">Ajustes:</b> ${esc(rv.ajustes)}</div>` : ''}</div></div>` : ''}
+    <div class="f2">${bloco('Ângulo', c.angulo)}${bloco('Mecanismo', c.mecanismo)}</div>
+    ${bloco('Hook', c.hook, 'hook')}${bloco('Body (estrutura)', c.body)}${bloco('Copy completa', c.copy, 'copy')}
+    <div class="f2"><label class="f"><span>Arquivo (Drive)</span><input type="url" id="ap_arq" value="${esc(c.arquivoUrl || '')}" placeholder="https://drive.google.com/…"></label>
+      <label class="f"><span>Nota <em>(vai no histórico)</em></span><input type="text" id="ap_nota" placeholder="opcional ao aprovar, obrigatória ao devolver"></label></div>
+    <div class="rodape">
+      <button class="btn ok" id="ap_ok" ${admin() ? '' : 'disabled title="Só o gestor aprova"'}>Aprovar <kbd>A</kbd></button>
+      <button class="btn danger" id="ap_dev">Devolver <kbd>D</kbd></button><span class="grow"></span><span class="fraco" style="font-size:12px"><kbd>↑</kbd><kbd>↓</kbd> navegar</span>
+    </div>`;
+  $('#ap_id').onkeydown = async (e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } if (e.key === 'Escape') { e.target.value = c.id; e.target.blur(); } };
+  $('#ap_id').onchange = async (e) => {
+    const novo = e.target.value.trim(); if (!novo || novo === c.id) return;
+    const r = await acao(() => api(`/api/cr/criativos/${enc(c.id)}`, { method: 'PATCH', body: { novoId: novo } }), `Renomeado para ${novo}.`);
+    if (r !== undefined) { S.aprovSel = novo; await recarregar(); route(); } else e.target.value = c.id;
+  };
+  $('#ap_ok').onclick = () => decidir('aprovado');
+  $('#ap_dev').onclick = () => decidir('briefing');
+}
+async function decidir(para) {
+  const c = criativo(S.aprovSel); if (!c) return;
+  if (para === 'aprovado' && !admin()) return toast('Só o gestor aprova.', true);
+  let nota = $('#ap_nota')?.value.trim() || '';
+  if (para === 'briefing' && !nota) { nota = await pedirNota(`Devolver ${c.id}`, 'O que precisa mudar? (o redator lê isto)'); if (nota === null) return; }
+  const arq = $('#ap_arq')?.value.trim() || '';
+  const lista = emRevisao(); const i = lista.findIndex((x) => x.id === c.id);
+  const prox = lista[i + 1]?.id || lista[i - 1]?.id || null;
+  try {
+    if (arq !== (c.arquivoUrl || '')) await api(`/api/cr/criativos/${enc(c.id)}`, { method: 'PATCH', body: { arquivoUrl: arq } });
+    await api(`/api/cr/criativos/${enc(c.id)}/status`, { method: 'POST', body: { para, nota } });
+    toast(para === 'aprovado' ? `${c.id} aprovado ✓` : `${c.id} devolvido para briefing`);
+    S.aprovSel = prox; await recarregar(); route();
+  } catch (e) { toast(e.message, true); }
+}
+document.addEventListener('keydown', (e) => {
+  if (rota().r !== 'aprovar' || !S.d || $('.modal') || $('.gaveta')) return;
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName) || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === 'a') { e.preventDefault(); decidir('aprovado'); }
+  else if (k === 'd') { e.preventDefault(); decidir('briefing'); }
+  else if (k === 'arrowdown' || k === 'arrowup') {
+    e.preventDefault(); const l = emRevisao(); const i = l.findIndex((x) => x.id === S.aprovSel);
+    const n = l[Math.max(0, Math.min(l.length - 1, i + (k === 'arrowdown' ? 1 : -1)))]; if (n) { S.aprovSel = n.id; pageAprovar(); $('.item.on')?.scrollIntoView({ block: 'nearest' }); }
+  }
+});
+
+// ---------------------------------------------------------------- 5. Board
+function pageBoard() {
+  const f = S.f;
+  $('#main').innerHTML = `<div class="filtros">
+    <div class="row" id="bOf">${S.d.ofertas.filter((o) => o.estado !== 'encerrada').map((o) => `<button class="chip ${f.ofertasBoard.includes(o.id) ? 'on' : ''}" data-o="${esc(o.id)}">${esc(o.id)}</button>`).join('')}</div>
+    <select id="bTipo">${opts(Object.entries(TIPO_NOME), f.tipo, 'Todos os tipos')}</select>
+    <input type="search" id="bBusca" placeholder="Buscar ID…" value="${esc(f.busca)}" style="width:180px">
+    <label class="row fraco" style="font-size:13px;cursor:pointer"><input type="checkbox" id="bMortos" ${f.ocultarMortos ? 'checked' : ''}> ocultar mortos</label>
+    <span class="grow"></span><button class="btn sm" id="bNovo">+ Criativo</button>
+  </div><div class="boardwrap"><div class="grupos" id="board"></div></div>`;
+  $$('#bOf [data-o]').forEach((b) => b.onclick = () => { const id = b.dataset.o; f.ofertasBoard = f.ofertasBoard.includes(id) ? f.ofertasBoard.filter((x) => x !== id) : [...f.ofertasBoard, id]; b.classList.toggle('on'); if (location.hash.includes('?')) history.replaceState(null, '', '#/board'); renderBoard(); });
+  $('#bTipo').onchange = (e) => { f.tipo = e.target.value; renderBoard(); };
+  $('#bBusca').oninput = (e) => { f.busca = e.target.value; clearTimeout(pageBoard.h); pageBoard.h = setTimeout(renderBoard, 180); };
+  $('#bMortos').onchange = (e) => { f.ocultarMortos = e.target.checked; renderBoard(); };
+  $('#bNovo').onclick = () => novoCriativo({ ofertaId: f.ofertasBoard.length === 1 ? f.ofertasBoard[0] : '' });
+  renderBoard();
+}
+function cardBoard(c) {
+  const res = RODANDO.includes(c.status) || c.status === 'morto';
+  const D = c.d7;
+  const linha = res
+    ? `<span>ROAS 7d <b class="${roasCls(D.roas)}">${fmtRoas(D.roas)}</b></span><span><b>${fmtI(D.vendas)}</b> v</span><span>${fmtR(D.gasto)}</span>`
+    : `${c.paiId ? `<span>de <b>${esc(c.paiId)}</b></span>` : ''}`;
+  const hk = !res && !c.paiId && c.hook ? `<div class="hk">${esc(c.hook.split(/\s+/).slice(0, 9).join(' '))}</div>` : '';
+  return `<div class="cc" draggable="true" data-ficha="${esc(c.id)}" data-id="${esc(c.id)}">
+    <div class="id"><span>${esc(c.id)}</span>${ok(c.score) ? `<span class="nota ${notaCls(c.score)}">${fmtN(c.score, c.score % 1 ? 1 : 0)}</span>` : ''}</div>
+    <div class="m">${chipTipo(c.tipo)}${c.formato ? `<span class="chip f">${esc(c.formato)}</span>` : ''}${linha}</div>${hk}</div>`;
 }
 function renderBoard() {
-  const lista = filtrados();
-  $('#board').innerHTML = S.d.status.map((st) => {
-    const cs = lista.filter((c) => c.status === st).sort((a, b) => (b.d7.receita || 0) - (a.d7.receita || 0) || b.statusEm.localeCompare(a.statusEm));
-    return `<div class="col ${st}"><h2><span>${STATUS_NOME[st]}</span><span>${cs.length}</span></h2>${cs.slice(0, 60).map(cardHtml).join('')}${cs.length > 60 ? `<div class="small muted">+${cs.length - 60} (use a Tabela)</div>` : ''}</div>`;
+  const f = S.f;
+  const lista = S.d.criativos.filter((c) => (!f.ofertasBoard.length || f.ofertasBoard.includes(c.ofertaId)) && (!f.tipo || c.tipo === f.tipo) && (!f.busca || norm(c.id).includes(norm(f.busca))) && !(f.ocultarMortos && c.status === 'morto'));
+  const st = S.d.status || Object.keys(STATUS_NOME);
+  $('#board').innerHTML = `<div class="gt">Produção</div><div class="gt">Resultado</div>` + st.map((s) => {
+    const cs = lista.filter((c) => c.status === s).sort((a, b) => (RODANDO.includes(s) ? (b.d7.receita || 0) - (a.d7.receita || 0) : 0) || String(b.statusEm).localeCompare(String(a.statusEm)));
+    return `<div class="col ${s}" data-col="${s}"><h3><span>${STATUS_NOME[s]}</span><span>${cs.length}</span></h3>${cs.slice(0, 80).map(cardBoard).join('')}${cs.length > 80 ? `<a href="#/criativos" class="fraco" style="font-size:12px;display:block;padding:4px">+${cs.length - 80} na tabela Criativos</a>` : ''}</div>`;
   }).join('');
-  $$('.ccard').forEach((el) => el.onclick = () => abrirFicha(el.dataset.id));
+  // arrastar entre colunas
+  $$('#board .cc').forEach((el) => {
+    el.ondragstart = (e) => { e.dataTransfer.setData('text/plain', el.dataset.id); el.classList.add('arrasta'); };
+    el.ondragend = () => el.classList.remove('arrasta');
+  });
+  $$('#board .col').forEach((col) => {
+    col.ondragover = (e) => { e.preventDefault(); col.classList.add('alvo'); };
+    col.ondragleave = () => col.classList.remove('alvo');
+    col.ondrop = (e) => { e.preventDefault(); col.classList.remove('alvo'); const id = e.dataTransfer.getData('text/plain'); const c = criativo(id); if (c && c.status !== col.dataset.col) mover(id, col.dataset.col); };
+  });
+}
+async function mover(id, para) {
+  if (para === 'aprovado' && !admin()) return toast('Só o gestor aprova.', true);
+  let nota = '';
+  if (PEDE_NOTA.includes(para)) { nota = await pedirNota(`${id} → ${STATUS_NOME[para]}`, para === 'morto' ? 'Por que morreu? (vira aprendizado)' : 'O que precisa mudar?'); if (nota === null) return; }
+  const r = await acao(() => api(`/api/cr/criativos/${enc(id)}/status`, { method: 'POST', body: { para, nota } }), `${id} → ${STATUS_NOME[para]}`);
+  if (r !== undefined) { await recarregar(); route(); if ($('.gaveta')) abrirFicha(id); }
 }
 
-// ---------------------------------------------------------------- tabela
+// ---------------------------------------------------------------- 6. Ofertas
+function pageOfertas() {
+  const p = S.d.painel, R = S.d.regras;
+  const linhas = S.d.ofertas.map((o) => ({ o, po: p.porOferta.find((x) => x.id === o.id) || {} })).sort((a, b) => (b.po.receita7 || 0) - (a.po.receita7 || 0));
+  $('#main').innerHTML = `<div class="filtros"><span class="fraco" style="font-size:13px">A sigla é o prefixo do nome dos anúncios (CFAM-L4-UGC-05 → CFAM). O estado define o mix da próxima leva.</span><span class="grow"></span>${admin() ? '<button class="btn sm" id="nOf">+ Oferta</button>' : ''}</div>
+  <div class="ofs">${linhas.map(({ o, po }) => {
+    const mix = o.mix || {};
+    const varr = po.receitaSemanaAnterior ? Math.round(((po.receita7 - po.receitaSemanaAnterior) / po.receitaSemanaAnterior) * 100) : null;
+    const risco = po.diasSemVencedor !== null && po.diasSemVencedor !== undefined && po.diasSemVencedor >= R.diasRisco;
+    return `<div class="card of"><h3>${esc(o.nome)} <span class="fraco" style="font-size:12px;font-weight:500">${esc(o.id)}</span> ${chipEst(o.estado)}</h3>
+      <div class="mix">${[['modelagem', 'Modelagem', 'var(--tx)'], ['variacao', 'Variação', 'var(--azul)'], ['zero', 'Do zero', 'var(--amar)']].map(([k, t, cor]) => `<div><span>${t}</span><div class="barra"><i style="width:${mix[k] ?? 0}%;background:${cor}"></i></div><span class="num">${mix[k] ?? '—'}%</span></div>`).join('')}</div>
+      <div class="kv">
+        <div><span class="cap">Receita 7d</span><b>${fmtR(po.receita7)} ${varr !== null ? `<small class="${varr >= 0 ? 'verde' : 'verm'}" style="font-size:12px">${varr >= 0 ? '▲' : '▼'}${Math.abs(varr)}%</small>` : ''}</b></div>
+        <div><span class="cap">Vencedores vivos</span><b>${po.vencedores ?? '—'}</b></div>
+        <div><span class="cap">No ar</span><b>${po.rodando ?? '—'}</b></div>
+        <div><span class="cap">Na fila</span><b>${po.emFila ?? '—'}</b></div>
+        <div><span class="cap">Último vencedor</span><b class="${risco ? 'verm' : ''}">${po.diasSemVencedor === null || po.diasSemVencedor === undefined ? 'nunca' : `há ${po.diasSemVencedor} dias`}</b></div>
+        <div><span class="cap">Próxima leva</span><b style="font-size:13.5px">${po.proximaLeva ? `${fmtData(po.proximaLeva.data)} · ${esc(po.proximaLeva.id)}` : '<span class="fraco">não planejada</span>'}</b></div>
+      </div>
+      <div class="row"><a class="btn sm" href="#/ofertas/${enc(o.id)}">Abrir</a><a class="btn ghost sm" href="#/board?oferta=${enc(o.id)}">Board</a></div></div>`;
+  }).join('') || '<div class="vazio"><b>Nenhuma oferta ainda.</b>Crie a primeira com "+ Oferta".</div>'}</div>`;
+  $('#nOf') && ($('#nOf').onclick = formNovaOferta);
+}
+function formNovaOferta() {
+  modal(`<h2>Nova oferta</h2><div class="form">
+    <div class="f2"><label class="f"><span>Sigla <em>(prefixo dos anúncios)</em></span><input id="no_id" placeholder="CFAM" style="text-transform:uppercase"></label><label class="f"><span>Nome</span><input id="no_nome"></label></div>
+    <div class="f2"><label class="f"><span>Família</span><input id="no_fam"></label><label class="f"><span>Estado</span><select id="no_est">${opts(Object.entries(ESTADO_NOME), 'validacao')}</select></label></div>
+    <div class="row"><span class="grow"></span><button class="btn ghost" data-fecha>Cancelar</button><button class="btn" id="no_ok">Criar</button></div></div>`);
+  $('#no_ok').onclick = async () => {
+    const id = $('#no_id').value.trim().toUpperCase();
+    const r = await acao(() => api('/api/cr/ofertas', { method: 'POST', body: { id, nome: $('#no_nome').value.trim(), familia: $('#no_fam').value.trim(), estado: $('#no_est').value } }), 'Oferta criada.');
+    if (r !== undefined) { fecharModal(); await recarregar(); location.hash = `#/ofertas/${enc(id)}`; }
+  };
+}
+function pageOferta(id) {
+  const o = oferta(id); if (!o) { $('#main').innerHTML = '<div class="vazio"><b>Oferta não encontrada.</b><a href="#/ofertas">Voltar</a></div>'; return; }
+  const lista = (s) => s.split(',').map((x) => x.trim()).filter(Boolean);
+  const levas = S.d.levas.filter((l) => l.ofertaId === id);
+  $('#main').innerHTML = `<div class="filtros"><a href="#/ofertas" class="fraco">← Ofertas</a>${chipEst(o.estado)}<span class="fraco" style="font-size:12.5px">${esc(o.id)}</span><span class="grow"></span><a class="btn ghost sm" href="#/board?oferta=${enc(id)}">Board</a></div>
+  <div class="det2">
+    <div class="card"><header><h2>Oferta</h2></header><div class="form">
+      <div class="f2"><label class="f"><span>Nome</span><input id="o_nome" value="${esc(o.nome)}"></label><label class="f"><span>Família</span><input id="o_fam" value="${esc(o.familia || '')}"></label></div>
+      <div class="f2"><label class="f"><span>Estado <em>(ajusta o mix sozinho)</em></span><select id="o_est">${opts(Object.entries(ESTADO_NOME), o.estado)}</select></label>
+        <label class="f"><span>Mix atual</span><input disabled value="${o.mix?.modelagem ?? '—'} / ${o.mix?.variacao ?? '—'} / ${o.mix?.zero ?? '—'}  (mod. / var. / zero)"></label></div>
+      <label class="f"><span>Outros prefixos de anúncio <em>(vírgula)</em></span><input id="o_pref" value="${esc((o.prefixos || []).join(', '))}" placeholder="BARCONST, CONST"></label>
+      <label class="f"><span>Produtos na Lastlink <em>(trechos do nome, vírgula)</em></span><input id="o_prod" value="${esc((o.produtos || []).join(', '))}"></label>
+      <div class="f2"><label class="f"><span>Página de vendas</span><input type="url" id="o_pv" value="${esc(o.pvUrl || '')}"></label><label class="f"><span>Pasta no Drive</span><input type="url" id="o_pasta" value="${esc(o.pastaDrive || '')}"></label></div>
+      <label class="f"><span>Pesquisa da oferta <em>— avatar, promessa, mecanismo, objeções. É o que o Diretor de Copy lê.</em></span><textarea id="o_notas" rows="14">${esc(o.notas || '')}</textarea></label>
+      <div class="row"><span class="fraco" style="font-size:12px">${o.atualizadoEm ? 'salvo ' + fmtDH(o.atualizadoEm) : ''}</span><span class="grow"></span><button class="btn" id="o_ok">Salvar oferta</button></div>
+    </div></div>
+    <div style="display:grid;gap:14px;min-width:0">
+      <div class="card"><header><h2>Levas</h2><span class="grow"></span><button class="btn sm" id="l_novo">+ Leva</button></header>
+        <div style="overflow:auto"><table class="tb"><thead><tr><th>Leva</th><th>Status</th><th>Planejada</th><th>No ar</th><th>Hipótese</th><th class="n">Criat.</th><th class="n">Venc.</th></tr></thead><tbody>
+        ${levas.map((l) => { const cs = S.d.criativos.filter((c) => c.levaId === l.id); return `<tr data-leva="${esc(l.id)}"><td><b>${esc(l.id)}</b></td><td>${LEVA_NOME[l.status] || esc(l.status)}</td><td>${fmtData(l.planejada)}</td><td>${fmtData(l.noAr)}</td><td class="hip">${esc(l.hipotese || '')}</td><td class="n">${cs.length}</td><td class="n">${cs.filter((c) => c.status === 'vencedor').length}</td></tr>`; }).join('') || '<tr><td colspan="7" class="fraco">Nenhuma leva ainda.</td></tr>'}
+        </tbody></table></div></div>
+      <div class="card"><header><h2>Aprendizados</h2><span class="grow"></span><select id="ap_tipo">${opts([['veredito', 'Vereditos'], ['hipotese', 'Hipóteses'], ['dissecacao', 'Dissecações'], ['nota', 'Notas']], '', 'Todos')}</select></header>
+        <div class="row" style="margin-bottom:12px"><input id="ap_txt" placeholder="Anotar algo que a oferta ensinou…" style="flex:1"><button class="btn sm" id="ap_add">Anotar</button></div>
+        <div id="ap_lista"><div class="fraco">carregando…</div></div></div>
+    </div>
+  </div>`;
+  $('#o_ok').onclick = async () => {
+    const body = { nome: $('#o_nome').value.trim(), familia: $('#o_fam').value.trim(), estado: $('#o_est').value, prefixos: lista($('#o_pref').value), produtos: lista($('#o_prod').value), pvUrl: $('#o_pv').value.trim(), pastaDrive: $('#o_pasta').value.trim(), notas: $('#o_notas').value };
+    const r = await acao(() => api(`/api/cr/ofertas/${enc(id)}`, { method: 'PATCH', body }), 'Oferta salva.');
+    if (r !== undefined) { await recarregar(); route(); }
+  };
+  $('#l_novo').onclick = () => formLeva(id);
+  $$('[data-leva]').forEach((tr) => tr.onclick = () => formLeva(id, tr.dataset.leva));
+  let apr = [];
+  const desenhar = () => { const t = $('#ap_tipo').value; $('#ap_lista').innerHTML = listaAprendizados(apr.filter((a) => !t || a.tipo === t)) || '<div class="fraco">Nada ainda.</div>'; };
+  $('#ap_tipo').onchange = desenhar;
+  $('#ap_add').onclick = async () => {
+    const texto = $('#ap_txt').value.trim(); if (!texto) return;
+    const r = await acao(() => api('/api/cr/aprendizados', { method: 'POST', body: { ofertaId: id, tipo: 'nota', texto } }), 'Anotado.');
+    if (r !== undefined) { $('#ap_txt').value = ''; apr.unshift(r); desenhar(); }
+  };
+  api(`/api/cr/aprendizados?oferta=${enc(id)}`).then((r) => { apr = r; if ($('#ap_lista')) desenhar(); }).catch((e) => { if ($('#ap_lista')) $('#ap_lista').innerHTML = `<div class="fraco">${esc(e.message)}</div>`; });
+}
+function formLeva(ofertaId, levaId) {
+  const l = levaId ? S.d.levas.find((x) => x.id === levaId) : null;
+  const cs = l ? S.d.criativos.filter((c) => c.levaId === l.id) : [];
+  modal(`<h2>${l ? esc(l.id) : 'Nova leva · ' + esc(ofertaId)}</h2><div class="form">
+    <div class="f3">${l ? `<label class="f"><span>Status</span><select id="l_st">${opts(Object.entries(LEVA_NOME), l.status)}</select></label>` : ''}
+      <label class="f"><span>Planejada</span><input type="date" id="l_pl" value="${l ? l.planejada || '' : hoje()}"></label>
+      ${l ? `<label class="f"><span>No ar</span><input type="date" id="l_na" value="${l.noAr || ''}"></label>` : ''}</div>
+    <label class="f"><span>Hipótese que a leva testa</span><textarea id="l_hip" rows="3">${esc(l?.hipotese || '')}</textarea></label>
+    ${l ? `<div><div class="cap" style="margin-bottom:6px">Criativos da leva (${cs.length})</div>${cs.map((c) => `<a href="#" data-ficha="${esc(c.id)}" class="chip" style="margin:0 4px 4px 0">${esc(c.id)} · ${STATUS_NOME[c.status]}</a>`).join('') || '<span class="fraco">nenhum</span>'}</div>` : ''}
+    <div class="row"><span class="grow"></span><button class="btn ghost" data-fecha>Cancelar</button><button class="btn" id="l_ok">${l ? 'Salvar' : 'Criar'}</button></div></div>`);
+  $('#l_ok').onclick = async () => {
+    const r = await acao(() => (l
+      ? api(`/api/cr/levas/${enc(l.id)}`, { method: 'PATCH', body: { status: $('#l_st').value, planejada: $('#l_pl').value || null, noAr: $('#l_na').value || null, hipotese: $('#l_hip').value } })
+      : api('/api/cr/levas', { method: 'POST', body: { ofertaId, planejada: $('#l_pl').value || null, hipotese: $('#l_hip').value } })), l ? 'Leva salva.' : 'Leva criada.');
+    if (r !== undefined) { fecharModal(); await recarregar(); route(); }
+  };
+}
+function listaAprendizados(rows) {
+  const ic = { veredito: '⚖️ Veredito', hipotese: '💡 Hipótese', nota: '📝 Nota', dissecacao: '🔬 Dissecação' };
+  return rows.map((a) => {
+    let corpo = esc(a.texto);
+    if (a.tipo === 'dissecacao') { try { corpo = fichaDissecacao(JSON.parse(a.texto)); } catch { /* texto cru */ } }
+    return `<div class="apr"><div class="t"><b>${ic[a.tipo] || esc(a.tipo)}</b><span>${esc(a.autor || '')}</span>${a.criativo_id ? `<a href="#" data-ficha="${esc(a.criativo_id)}">${esc(a.criativo_id)}</a>` : ''}<span style="margin-left:auto">${fmtDH(a.criado_em)}</span></div><div class="txt">${corpo}</div></div>`;
+  }).join('');
+}
+function fichaDissecacao(d) {
+  const ang = (x) => (x && (x.categoria || x.angulo) ? `<b>${esc(x.categoria)}</b> · ${esc(x.angulo)}${x.ideia ? `<div class="fraco">${esc(x.ideia)}</div>` : ''}` : '—');
+  const linha = (t, v) => `<div><span>${t}</span><span>${v || '—'}</span></div>`;
+  return `<div class="dis">
+    ${linha('Hook literal', d.hook_literal ? `“${esc(d.hook_literal)}”` : '')}
+    ${linha('Modelo de gancho', esc(d.modelo_gancho))}
+    ${linha('Categoria', esc(d.categoria_gancho))}
+    ${linha('Ângulo do hook', ang(d.angulo_hook))}
+    ${linha('Ângulo do body', ang(d.angulo_body))}
+    ${linha('Avatar', esc(d.avatar))}
+    ${linha('Consciência', esc(d.consciencia))}
+    ${linha('Emoções', esc((d.emocoes || []).filter(Boolean).join(', ')))}
+    ${linha('Esqueleto', (d.esqueleto || []).length ? `<ol>${d.esqueleto.map((b) => `<li><b>${esc(b.bloco)}</b> — ${esc(b.funcao)}</li>`).join('')}</ol>` : '')}
+  </div>`;
+}
+
+// ---------------------------------------------------------------- 7. Criativos (tabela)
 const COLS = [
   ['id', 'Criativo'], ['ofertaId', 'Oferta'], ['status', 'Status'], ['tipo', 'Tipo'], ['formato', 'Fmt'], ['levaId', 'Leva'],
-  ['d7.gasto', 'Gasto 7d', 1], ['d7.vendas', 'Vendas 7d', 1], ['d7.roas', 'ROAS 7d', 1], ['total.gasto', 'Gasto total', 1], ['total.vendas', 'Vendas', 1], ['total.receita', 'Receita', 1], ['total.roas', 'ROAS', 1], ['total.cpa', 'CPA', 1], ['total.hookRate', 'Hook %', 1], ['total.holdRate', 'Hold %', 1], ['total.ctr', 'CTR %', 1], ['noArEm', 'No ar desde'],
+  ['d7.gasto', 'Gasto 7d', 'r'], ['d7.vendas', 'Vendas 7d', 'i'], ['d7.roas', 'ROAS 7d', 'roas'], ['total.gasto', 'Gasto total', 'r'], ['total.vendas', 'Vendas', 'i'], ['total.receita', 'Receita', 'r'],
+  ['total.roas', 'ROAS', 'roas'], ['total.cpa', 'CPA', 'r'], ['total.hookRate', 'Hook %', 'p'], ['total.holdRate', 'Hold %', 'p'], ['total.ctr', 'CTR %', 'p'], ['noArEm', 'No ar desde', 'd'],
 ];
-function pageTabela() {
-  $('#main').innerHTML = `<div class="head"><div><h1>Tabela</h1><div class="muted">A Evidência: ordene por qualquer coluna. É daqui que saem os pais da próxima leva.</div></div></div>
-  ${barraFiltros(`<select id="f_status">${opts(S.d.status.map((s) => [s, STATUS_NOME[s]]), S.f.status || '', 'Todos os status')}</select><button class="btn ghost small" id="csv">Baixar CSV</button>`)}
-  <div class="tablewrap" id="tw"></div>`;
-  bindFiltros(renderTabela);
-  $('#f_status').onchange = (e) => { S.f.status = e.target.value; renderTabela(); };
-  $('#csv').onclick = () => baixarCsv(linhasTabela());
+function pageCriativos() {
+  const f = S.f;
+  $('#main').innerHTML = `<div class="filtros">
+    <select id="tOf">${opts(S.d.ofertas.map((o) => [o.id, o.nome]), f.oferta, 'Todas as ofertas')}</select>
+    <select id="tSt">${opts((S.d.status || Object.keys(STATUS_NOME)).map((s) => [s, STATUS_NOME[s]]), f.status, 'Todos os status')}</select>
+    <select id="tTipo">${opts(Object.entries(TIPO_NOME), f.tipo, 'Todos os tipos')}</select>
+    <input type="search" id="tBusca" placeholder="Buscar ID, ângulo, hook…" value="${esc(f.busca)}" style="width:220px">
+    <span class="grow"></span><button class="btn ghost sm" id="tCsv">Baixar CSV</button><button class="btn sm" id="tNovo">+ Criativo</button>
+  </div><div class="tw" id="tw"></div><div class="fraco" id="tN" style="font-size:12px;margin-top:8px"></div>`;
+  $('#tOf').onchange = (e) => { f.oferta = e.target.value; renderTabela(); };
+  $('#tSt').onchange = (e) => { f.status = e.target.value; renderTabela(); };
+  $('#tTipo').onchange = (e) => { f.tipo = e.target.value; renderTabela(); };
+  $('#tBusca').oninput = (e) => { f.busca = e.target.value; clearTimeout(pageCriativos.h); pageCriativos.h = setTimeout(renderTabela, 180); };
+  $('#tCsv').onclick = () => baixarCsv(linhasTabela());
+  $('#tNovo').onclick = () => novoCriativo({ ofertaId: f.oferta });
   renderTabela();
 }
-const linhasTabela = () => filtrados().filter((c) => !S.f.status || c.status === S.f.status).sort((a, b) => { const x = get(a, S.ord.k), y = get(b, S.ord.k); if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1; return (typeof x === 'number' ? x - y : String(x).localeCompare(String(y))) * S.ord.dir; });
+function linhasTabela() {
+  const f = S.f;
+  return S.d.criativos.filter((c) => (!f.oferta || c.ofertaId === f.oferta) && (!f.status || c.status === f.status) && (!f.tipo || c.tipo === f.tipo) && (!f.busca || norm(`${c.id} ${c.angulo || ''} ${c.hook || ''}`).includes(norm(f.busca))))
+    .sort((a, b) => { const x = get(a, S.ord.k), y = get(b, S.ord.k); if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1; return (typeof x === 'number' ? x - y : String(x).localeCompare(String(y))) * S.ord.dir; });
+}
+function celula(c, k, t) {
+  const v = get(c, k);
+  if (k === 'status') return chipSt(v);
+  if (k === 'tipo') return TIPO_NOME[v] || '—';
+  if (t === 'r') return fmtR(v);
+  if (t === 'i') return fmtI(v);
+  if (t === 'p') return fmtN(v, 1);
+  if (t === 'roas') return `<span class="${roasCls(v)}">${fmtRoas(v)}</span>`;
+  if (t === 'd') return fmtData(v);
+  return v ? esc(v) : '—';
+}
 function renderTabela() {
   const rows = linhasTabela();
-  $('#tw').innerHTML = `<table class="tb"><thead><tr>${COLS.map(([k, n, num]) => `<th class="${num ? 'n' : ''} ${S.ord.k === k ? 'on' : ''}" data-k="${k}">${n}${S.ord.k === k ? (S.ord.dir > 0 ? ' ↑' : ' ↓') : ''}</th>`).join('')}</tr></thead>
-  <tbody>${rows.slice(0, 1500).map((c) => `<tr>${COLS.map(([k, , num]) => { let v = get(c, k); if (k === 'id') v = `<a href="#" data-id="${esc(c.id)}">${esc(c.id)}</a>`; else if (k === 'status') v = STATUS_NOME[v]; else if (k === 'tipo') v = TIPO_NOME[v]; else if (k === 'noArEm') v = fmtData(v); else if (num) v = k.endsWith('gasto') || k.endsWith('receita') || k.endsWith('cpa') ? fmtR(v) : fmtN(v, k.endsWith('vendas') ? 0 : 2); return `<td class="${num ? 'n' : ''}">${v ?? '—'}</td>`; }).join('')}</tr>`).join('')}</tbody></table>
-  <div class="small muted" style="padding:8px 10px">${rows.length} criativos</div>`;
+  $('#tw').innerHTML = `<table class="tb"><thead><tr>${COLS.map(([k, n, t]) => `<th class="${t && t !== 'd' ? 'n' : ''} ${S.ord.k === k ? 'on' : ''}" data-k="${k}">${n}${S.ord.k === k ? (S.ord.dir > 0 ? ' ↑' : ' ↓') : ''}</th>`).join('')}</tr></thead>
+  <tbody>${rows.slice(0, 1500).map((c) => `<tr data-ficha="${esc(c.id)}">${COLS.map(([k, , t]) => `<td class="${t && t !== 'd' ? 'n' : ''}">${k === 'id' ? `<b>${esc(c.id)}</b>` : celula(c, k, t)}</td>`).join('')}</tr>`).join('') || `<tr><td colspan="${COLS.length}" class="fraco" style="text-align:center;height:80px">Nenhum criativo com esses filtros.</td></tr>`}</tbody></table>`;
+  $('#tN').textContent = `${rows.length} criativos${rows.length > 1500 ? ' (mostrando 1.500; o CSV leva todos)' : ''}`;
   $$('th[data-k]').forEach((th) => th.onclick = () => { const k = th.dataset.k; S.ord = { k, dir: S.ord.k === k ? -S.ord.dir : -1 }; renderTabela(); });
-  $$('td a[data-id]').forEach((a) => a.onclick = (e) => { e.preventDefault(); abrirFicha(a.dataset.id); });
 }
 function baixarCsv(rows) {
   const escC = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -205,228 +596,229 @@ function baixarCsv(rows) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], { type: 'text/csv' })); a.download = `criativos-${hoje()}.csv`; a.click();
 }
 
-// ---------------------------------------------------------------- calendário
-function pageCalendario() {
-  const ini = new Date(); ini.setDate(ini.getDate() - ini.getDay()); // domingo desta semana
-  const diasCal = Array.from({ length: 28 }, (_, i) => { const d = new Date(ini); d.setDate(ini.getDate() + i); return d.toLocaleDateString('en-CA'); });
-  const h = hoje();
-  $('#main').innerHTML = `<div class="head"><div><h1>Calendário de levas</h1><div class="muted">Quando sai a próxima leva de cada oferta. A cada 2–3 dias, uma leva por oferta viva.</div></div><button class="btn small" id="nl">+ Leva</button></div>
-  <div class="cal">${diasCal.map((d) => { const dt = new Date(d + 'T12:00'); const fds = [0, 6].includes(dt.getDay()); const ls = S.d.levas.filter((l) => (l.planejada || l.noAr) === d || (l.status === 'no_ar' && l.noAr === d)); return `<div class="d ${d === h ? 'hoje' : ''}"><div class="dt ${fds ? 'fds' : ''}">${dt.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit' })}</div>${ls.map((l) => `<a class="lv ${l.status}" href="#" data-l="${esc(l.id)}">${esc(l.id)}${l.hipotese ? ` · ${esc(l.hipotese.slice(0, 28))}` : ''}</a>`).join('')}</div>`; }).join('')}</div>
-  <div class="panel" style="margin-top:16px"><header><h2>Levas</h2></header><div class="body"><table class="tb"><thead><tr><th>Leva</th><th>Oferta</th><th>Status</th><th>Planejada</th><th>No ar</th><th>Hipótese</th><th class="n">Criativos</th><th class="n">Vencedores</th></tr></thead><tbody>
-  ${S.d.levas.slice(0, 80).map((l) => { const cs = S.d.criativos.filter((c) => c.levaId === l.id); return `<tr><td><a href="#" data-l="${esc(l.id)}">${esc(l.id)}</a></td><td>${esc(l.ofertaId)}</td><td>${esc(l.status)}</td><td>${fmtData(l.planejada)}</td><td>${fmtData(l.noAr)}</td><td style="white-space:normal">${esc(l.hipotese || '')}</td><td class="n">${cs.length}</td><td class="n">${cs.filter((c) => c.status === 'vencedor').length}</td></tr>`; }).join('')}
-  </tbody></table></div></div>`;
-  $('#nl').onclick = novaLeva;
-  $$('[data-l]').forEach((a) => a.onclick = (e) => { e.preventDefault(); editarLeva(a.dataset.l); });
-}
-function novaLeva() {
-  modal(`<h2>Nova leva</h2><div class="stack">
-    <label class="f"><span>Oferta</span><select id="l_of">${opts(S.d.ofertas.map((o) => [o.id, o.nome]), S.f.oferta, 'Escolha')}</select></label>
-    <label class="f"><span>Data planejada</span><input type="date" id="l_data" value="${hoje()}"></label>
-    <label class="f"><span>Hipótese que a leva testa</span><input type="text" id="l_hip" placeholder="Ex.: ângulo 'sintoma físico' em UGC"></label>
-    <div class="row"><button class="btn" id="l_ok">Criar</button></div></div>`);
-  $('#l_ok').onclick = async () => { try { await api('/api/cr/levas', { method: 'POST', body: { ofertaId: $('#l_of').value, planejada: $('#l_data').value, hipotese: $('#l_hip').value } }); fecharModal(); await recarregar(); route(); toast('Leva criada.'); } catch (e) { toast(e.message, true); } };
-}
-function editarLeva(id) {
-  const l = S.d.levas.find((x) => x.id === id); if (!l) return;
-  const cs = S.d.criativos.filter((c) => c.levaId === id);
-  modal(`<h2>${esc(l.id)}</h2><div class="stack">
-    <div class="form3"><label class="f"><span>Status</span><select id="l_st">${opts(['planejada', 'producao', 'no_ar', 'encerrada'], l.status)}</select></label>
-    <label class="f"><span>Planejada</span><input type="date" id="l_data" value="${l.planejada || ''}"></label>
-    <label class="f"><span>No ar</span><input type="date" id="l_noar" value="${l.noAr || ''}"></label></div>
-    <label class="f"><span>Hipótese</span><input type="text" id="l_hip" value="${esc(l.hipotese || '')}"></label>
-    <div class="row"><button class="btn" id="l_ok">Salvar</button></div>
-    <h3>Criativos da leva (${cs.length})</h3>${cs.map(cardHtml).join('') || '<div class="muted small">Nenhum ainda. Crie em Board › + Criativo escolhendo esta leva.</div>'}</div>`);
-  $$('.ccard', $('#modal')).forEach((el) => el.onclick = () => abrirFicha(el.dataset.id));
-  $('#l_ok').onclick = async () => { try { await api(`/api/cr/levas/${id}`, { method: 'PATCH', body: { status: $('#l_st').value, planejada: $('#l_data').value || null, noAr: $('#l_noar').value || null, hipotese: $('#l_hip').value } }); fecharModal(); await recarregar(); route(); } catch (e) { toast(e.message, true); } };
-}
-
-// ---------------------------------------------------------------- ofertas
-function pageOfertas() {
-  $('#main').innerHTML = `<div class="head"><div><h1>Ofertas</h1><div class="muted">A sigla é o prefixo do nome dos anúncios (CFAM-L4-UGC-05 → CFAM). O estado define o mix da próxima leva.</div></div><button class="btn small" id="no">+ Oferta</button></div>
-  <div class="cards">${S.d.ofertas.map((o) => `<div class="ocard" style="grid-template-columns:1fr auto"><div><h3>${esc(o.nome)} <span class="muted">${o.id}</span> <span class="est ${o.estado}">${ESTADO_NOME[o.estado]}</span></h3>
-    <div class="meta"><span class="t">mix ${o.mix?.modelagem ?? 60}/${o.mix?.variacao ?? 30}/${o.mix?.zero ?? 10}</span>${(o.prefixos || []).map((p) => `<span class="t">${esc(p)}</span>`).join('')}${o.familia ? `<span>${esc(o.familia)}</span>` : ''}${o.pastaDrive ? `<a href="${esc(o.pastaDrive)}" target="_blank">pasta</a>` : ''}${o.pvUrl ? `<a href="${esc(o.pvUrl)}" target="_blank">PV</a>` : ''}</div>
-    ${o.notas ? `<div class="small muted" style="margin-top:6px">${esc(o.notas)}</div>` : ''}</div><div><button class="btn ghost small" data-ed="${o.id}">Editar</button></div></div>`).join('') || '<div class="muted">Nenhuma oferta ainda.</div>'}</div>`;
-  $('#no').onclick = () => formOferta();
-  $$('[data-ed]').forEach((b) => b.onclick = () => formOferta(oferta(b.dataset.ed)));
-}
-function formOferta(o) {
-  const mix = o?.mix || { modelagem: 60, variacao: 30, zero: 10 };
-  modal(`<h2>${o ? esc(o.nome) : 'Nova oferta'}</h2><div class="stack">
-    <div class="form3"><label class="f"><span>Sigla (prefixo dos anúncios)</span><input type="text" id="o_id" value="${esc(o?.id || '')}" ${o ? 'disabled' : ''} placeholder="CFAM"></label>
-    <label class="f"><span>Nome</span><input type="text" id="o_nome" value="${esc(o?.nome || '')}"></label>
-    <label class="f"><span>Família</span><input type="text" id="o_fam" value="${esc(o?.familia || '')}" placeholder="Constelação"></label></div>
-    <div class="form3"><label class="f"><span>Estado</span><select id="o_est">${opts(Object.entries(ESTADO_NOME), o?.estado || 'validacao')}</select></label>
-    <label class="f"><span>Outros prefixos <em>(vírgula)</em></span><input type="text" id="o_pref" value="${esc((o?.prefixos || []).join(', '))}" placeholder="BARCONST, CONST"></label>
-    <label class="f"><span>Produtos na Lastlink <em>(trechos do nome, vírgula)</em></span><input type="text" id="o_prod" value="${esc((o?.produtos || []).join(', '))}" placeholder="Baralho da Constelação"></label></div>
-    <div class="form3"><label class="f"><span>Mix: modelagem %</span><input type="number" id="o_m1" value="${mix.modelagem}"></label><label class="f"><span>variação %</span><input type="number" id="o_m2" value="${mix.variacao}"></label><label class="f"><span>do zero %</span><input type="number" id="o_m3" value="${mix.zero}"></label></div>
-    <div class="grid2"><label class="f"><span>Pasta no Drive</span><input type="url" id="o_pasta" value="${esc(o?.pastaDrive || '')}"></label><label class="f"><span>Página de vendas</span><input type="url" id="o_pv" value="${esc(o?.pvUrl || '')}"></label></div>
-    <label class="f"><span>Notas</span><textarea id="o_notas">${esc(o?.notas || '')}</textarea></label>
-    <div class="row"><button class="btn" id="o_ok">Salvar</button></div></div>`);
-  $('#o_ok').onclick = async () => {
-    const lista = (s) => s.split(',').map((x) => x.trim()).filter(Boolean);
-    const body = { nome: $('#o_nome').value, familia: $('#o_fam').value, estado: $('#o_est').value, prefixos: lista($('#o_pref').value), produtos: lista($('#o_prod').value), mix: { modelagem: Number($('#o_m1').value), variacao: Number($('#o_m2').value), zero: Number($('#o_m3').value) }, pastaDrive: $('#o_pasta').value, pvUrl: $('#o_pv').value, notas: $('#o_notas').value };
-    try { if (o) await api(`/api/cr/ofertas/${o.id}`, { method: 'PATCH', body }); else await api('/api/cr/ofertas', { method: 'POST', body: { id: $('#o_id').value, ...body } }); fecharModal(); await recarregar(); route(); toast('Salvo.'); } catch (e) { toast(e.message, true); }
-  };
-}
-
-// ---------------------------------------------------------------- ficha do criativo
-function modal(html) { fecharModal(); const m = document.createElement('div'); m.className = 'modal'; m.id = 'modal'; m.innerHTML = `<div class="box"><button class="linkbtn x" id="mx">Fechar</button>${html}</div>`; document.body.appendChild(m); $('#mx').onclick = fecharModal; m.onclick = (e) => { if (e.target === m) fecharModal(); }; }
-function fecharModal() { $('#modal')?.remove(); }
-
+// ---------------------------------------------------------------- 8. Ficha lateral
+function fecharGaveta() { $('.gaveta')?.remove(); $('.veu')?.remove(); }
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if ($('.modal')) fecharModal(); else fecharGaveta(); } });
 async function abrirFicha(id) {
-  const c = criativo(id); if (!c) return toast('Criativo não encontrado.', true);
-  const R = S.d.regras, T = c.total, D = c.d7;
-  const admin = S.user.papel === 'admin';
-  const met = (v, l) => `<div><div class="v">${v}</div><div class="l">${l}</div></div>`;
-  const prox = (PROXIMO[c.status] || []).filter((s) => admin || s !== 'aprovado');
-  modal(`<div class="fh"><div><h2>${esc(c.id)} <span class="st">${STATUS_NOME[c.status]}</span></h2>
-    <div class="meta"><span class="tipo ${c.tipo}">${TIPO_NOME[c.tipo]}</span><span class="t">${esc(c.ofertaId)}</span>${c.levaId ? `<span class="t">${esc(c.levaId)}</span>` : ''}${c.formato ? `<span class="t">${esc(c.formato)}</span>` : ''}${c.paiId ? `<span>pai: <a href="#" data-id="${esc(c.paiId)}">${esc(c.paiId)}</a></span>` : ''}${c.noArEm ? `<span>no ar há ${dias(c.noArEm)} dias</span>` : ''}</div></div></div>
-  <div class="mets">${met(fmtR(T.gasto), 'gasto total')}${met(T.vendas, 'vendas')}${met(fmtR(T.receita), 'receita')}${met(`<span class="${roasCls(T.roas, R)}">${T.roas ?? '—'}</span>`, 'ROAS total')}${met(`<span class="${roasCls(D.roas, R)}">${D.roas ?? '—'}</span>`, 'ROAS 7d')}${met(fmtR(T.cpa), 'CPA')}</div>
-  <div class="mets">${met(fmtN(T.hookRate), 'hook % (3s/impr.)')}${met(fmtN(T.holdRate), 'hold % (75%/impr.)')}${met(fmtN(T.ctr), 'CTR %')}${met(fmtN(T.conversao), 'conv. % (vendas/LPV)')}${met(T.ic, 'inícios de checkout')}${met(T.reembolsos, 'reembolsos')}</div>
-  <div id="serie" class="small muted">carregando série diária…</div>
-  <div class="acoes">${prox.map((s) => `<button class="btn ${s === 'aprovado' ? 'ok' : s === 'morto' ? 'danger' : s === 'briefing' && c.status === 'revisao' ? 'warn' : 'ghost'} small" data-st="${s}">${s === 'briefing' && c.status === 'revisao' ? 'Devolver' : s === 'aprovado' ? 'Aprovar' : '→ ' + STATUS_NOME[s]}</button>`).join('')}</div>
-  <div class="form3">
-    <label class="f"><span>Tipo</span><select id="c_tipo">${opts(Object.entries(TIPO_NOME), c.tipo)}</select></label>
-    <label class="f"><span>Formato</span><select id="c_fmt">${opts(FORMATOS, c.formato || '', '—')}</select></label>
-    <label class="f"><span>Leva</span><select id="c_leva">${opts(S.d.levas.filter((l) => l.ofertaId === c.ofertaId).map((l) => [l.id, l.id + (l.hipotese ? ' · ' + l.hipotese.slice(0, 30) : '')]), c.levaId || '', '—')}</select></label>
-    <label class="f"><span>Criativo-pai</span><input type="text" id="c_pai" value="${esc(c.paiId || '')}" list="ids"></label>
-    <label class="f"><span>Ângulo</span><input type="text" id="c_ang" value="${esc(c.angulo || '')}"></label>
-    <label class="f"><span>Mecanismo</span><input type="text" id="c_mec" value="${esc(c.mecanismo || '')}"></label>
-    <label class="f"><span>Hook</span><input type="text" id="c_hook" value="${esc(c.hook || '')}"></label>
-    <label class="f"><span>Body (estrutura)</span><input type="text" id="c_body" value="${esc(c.body || '')}"></label>
-    <label class="f"><span>Arquivo (Drive)</span><input type="url" id="c_arq" value="${esc(c.arquivoUrl || '')}"></label>
-  </div>
-  <datalist id="ids">${S.d.criativos.filter((x) => x.status === 'vencedor' && x.ofertaId === c.ofertaId).map((x) => `<option value="${esc(x.id)}">`).join('')}</datalist>
-  <label class="f" style="margin-top:10px"><span>Copy / roteiro</span><textarea id="c_copy" rows="5">${esc(c.copy || '')}</textarea></label>
-  <div class="grid2" style="margin-top:10px"><label class="f"><span>Aprendizado <em>(1 linha: o que este criativo ensinou)</em></span><input type="text" id="c_apr" value="${esc(c.aprendizado || '')}"></label><label class="f"><span>Nota do revisor <em>(0–10)</em></span><input type="number" id="c_score" min="0" max="10" value="${c.score ?? ''}"></label></div>
-  <div class="row" style="margin:10px 0 16px"><button class="btn" id="c_ok">Salvar ficha</button><span class="small muted">${c.criadoPor ? `criado por ${esc(c.criadoPor)} em ${fmtDH(c.criadoEm)}` : ''}</span></div>
-  <h3>Histórico</h3><div class="hist">${(c.historico || []).slice().reverse().map((h) => `<div>${fmtDH(h.em)} · ${h.de ? STATUS_NOME[h.de] + ' → ' : ''}${STATUS_NOME[h.para] || h.para} · ${esc(h.por)}${h.nota ? ` · ${esc(h.nota)}` : ''}</div>`).join('')}</div>`);
-  $$('[data-id]', $('#modal')).forEach((a) => a.onclick = (e) => { e.preventDefault(); abrirFicha(a.dataset.id); });
-  $$('[data-st]').forEach((b) => b.onclick = async () => {
-    const para = b.dataset.st;
-    const nota = ['briefing', 'morto', 'meio'].includes(para) ? prompt('Nota (por quê?):') : '';
-    if (nota === null) return;
-    try { await api(`/api/cr/criativos/${encodeURIComponent(c.id)}/status`, { method: 'POST', body: { para, nota } }); await recarregar(); route(); abrirFicha(c.id); toast(`${c.id} → ${STATUS_NOME[para]}`); } catch (e) { toast(e.message, true); }
-  });
+  const c = criativo(id); if (!c) return toast(`Criativo ${id} não está na base.`, true);
+  fecharGaveta();
+  const T = c.total, D = c.d7;
+  const prox = (PROXIMO[c.status] || []).filter((s) => admin() || s !== 'aprovado');
+  const veu = document.createElement('div'); veu.className = 'veu'; veu.onclick = fecharGaveta;
+  const g = document.createElement('aside'); g.className = 'gaveta';
+  const m = (v, l) => `<div><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  const vencedores = S.d.criativos.filter((x) => x.ofertaId === c.ofertaId && x.status === 'vencedor' && x.id !== c.id);
+  g.innerHTML = `<button class="btn ghost sm fechar" id="g_x">Fechar <kbd>Esc</kbd></button>
+    <h2>${esc(c.id)}</h2>
+    <div class="meta">${chipSt(c.status)}<span class="chip">${esc(oferta(c.ofertaId)?.nome || c.ofertaId)}</span>${c.levaId ? `<span class="chip">${esc(c.levaId)}</span>` : ''}${chipTipo(c.tipo)}${c.formato ? `<span class="chip f">${esc(c.formato)}</span>` : ''}
+      ${c.paiId ? `<span>pai <a href="#" data-ficha="${esc(c.paiId)}">${esc(c.paiId)}</a></span>` : ''}${noArHa(c) !== null ? `<span>no ar há ${noArHa(c)} dias</span>` : ''}</div>
+    <div class="reg6">${m(fmtR(T.gasto), 'Gasto total')}${m(fmtI(T.vendas), 'Vendas')}${m(fmtR(T.receita), 'Receita')}${m(`<span class="${roasCls(T.roas)}">${fmtRoas(T.roas)}</span>`, 'ROAS total')}${m(`<span class="${roasCls(D.roas)}">${fmtRoas(D.roas)}</span>`, 'ROAS 7d')}${m(fmtR(T.cpa), 'CPA')}</div>
+    <div class="reg6">${m(fmtN(T.hookRate), 'Hook %')}${m(fmtN(T.holdRate), 'Hold %')}${m(fmtN(T.ctr), 'CTR %')}${m(fmtN(T.conversao), 'Conversão %')}${m(fmtI(T.ic), 'IC')}${m(fmtI(T.reembolsos), 'Reembolsos')}</div>
+    <div id="g_serie" class="fraco" style="font-size:12.5px;margin-top:10px">carregando o dia a dia…</div>
+    <div class="acoes">${prox.map((s) => `<button class="btn sm ${s === 'aprovado' || s === 'vencedor' ? 'ok' : s === 'morto' ? 'danger' : 'ghost'}" data-para="${s}">${s === 'aprovado' ? 'Aprovar' : s === 'briefing' && c.status === 'revisao' ? 'Devolver' : '→ ' + STATUS_NOME[s]}</button>`).join('')}
+      <span style="flex:1"></span><button class="btn ghost sm" id="g_dis" ${c.copy && c.copy.trim().length >= 20 ? '' : 'disabled title="Cole a copy na ficha antes"'}>Dissecar</button></div>
+    <div class="form">
+      <div class="f3"><label class="f"><span>Tipo</span><select id="c_tipo">${opts(Object.entries(TIPO_NOME), c.tipo)}</select></label>
+        <label class="f"><span>Formato</span><select id="c_fmt">${opts(FORMATOS, c.formato, '—')}</select></label>
+        <label class="f"><span>Leva</span><select id="c_leva">${opts(S.d.levas.filter((l) => l.ofertaId === c.ofertaId).map((l) => [l.id, l.id]), c.levaId, '—')}</select></label></div>
+      <div class="f2"><label class="f"><span>Criativo-pai <em>(vencedores da oferta)</em></span><input id="c_pai" list="g_pais" value="${esc(c.paiId || '')}"></label>
+        <label class="f"><span>Arquivo (Drive)</span><input type="url" id="c_arq" value="${esc(c.arquivoUrl || '')}"></label></div>
+      <datalist id="g_pais">${vencedores.map((x) => `<option value="${esc(x.id)}">ROAS ${fmtRoas(x.total.roas)} · ${x.total.vendas} vendas</option>`).join('')}</datalist>
+      <div class="f2"><label class="f"><span>Ângulo</span><input id="c_ang" value="${esc(c.angulo || '')}"></label><label class="f"><span>Mecanismo</span><input id="c_mec" value="${esc(c.mecanismo || '')}"></label></div>
+      <label class="f"><span>Hook</span><input id="c_hook" value="${esc(c.hook || '')}"></label>
+      <label class="f"><span>Body (estrutura)</span><input id="c_body" value="${esc(c.body || '')}"></label>
+      <label class="f"><span>Copy <em>(texto do anúncio, HEADLINE, ROTEIRO/ARTE, POR QUE)</em></span><textarea id="c_copy" rows="10">${esc(c.copy || '')}</textarea></label>
+      <div class="f2"><label class="f"><span>Aprendizado <em>(1 linha)</em></span><input id="c_apr" value="${esc(c.aprendizado || '')}"></label><label class="f"><span>Nota do revisor <em>(0–10)</em></span><input type="number" id="c_score" min="0" max="10" step="0.5" value="${c.score ?? ''}"></label></div>
+      <div class="row"><span class="fraco" style="font-size:12px">${c.criadoPor ? `criado por ${esc(c.criadoPor)} · ${fmtDH(c.criadoEm)}` : ''}</span><span class="grow"></span><button class="btn" id="c_ok">Salvar ficha</button></div>
+    </div>
+    <h3>Histórico</h3><div class="hist">${(c.historico || []).slice().reverse().map((h) => `<div>${fmtDH(h.em)} · ${h.de ? STATUS_NOME[h.de] + ' → ' : ''}<b>${STATUS_NOME[h.para] || esc(h.para)}</b> · ${esc(h.por)}${h.nota ? ` — ${esc(h.nota)}` : ''}</div>`).join('') || 'sem histórico'}</div>
+    <h3>Aprendizados</h3><div id="g_apr" class="fraco">carregando…</div>`;
+  document.body.append(veu, g);
+  $('#g_x').onclick = fecharGaveta;
+  $$('[data-para]', g).forEach((b) => b.onclick = () => mover(c.id, b.dataset.para));
+  $('#g_dis').onclick = async () => {
+    $('#g_dis').disabled = true; $('#g_dis').textContent = 'Dissecando…';
+    const r = await acao(() => api(`/api/cr/criativos/${enc(c.id)}/dissecar`, { method: 'POST' }), 'Dissecação gravada.');
+    if (r !== undefined) carregarApr(); if ($('#g_dis')) { $('#g_dis').disabled = false; $('#g_dis').textContent = 'Dissecar'; }
+  };
   $('#c_ok').onclick = async () => {
-    try {
-      await api(`/api/cr/criativos/${encodeURIComponent(c.id)}`, { method: 'PATCH', body: { tipo: $('#c_tipo').value, formato: $('#c_fmt').value || null, levaId: $('#c_leva').value || null, paiId: $('#c_pai').value || null, angulo: $('#c_ang').value, mecanismo: $('#c_mec').value, hook: $('#c_hook').value, body: $('#c_body').value, arquivoUrl: $('#c_arq').value, copy: $('#c_copy').value, aprendizado: $('#c_apr').value, score: $('#c_score').value === '' ? null : Number($('#c_score').value) } });
-      await recarregar(); route(); toast('Ficha salva.');
-    } catch (e) { toast(e.message, true); }
+    const sc = $('#c_score').value;
+    const body = { tipo: $('#c_tipo').value, formato: $('#c_fmt').value || null, levaId: $('#c_leva').value || null, paiId: $('#c_pai').value.trim() || null, arquivoUrl: $('#c_arq').value.trim(), angulo: $('#c_ang').value, mecanismo: $('#c_mec').value, hook: $('#c_hook').value, body: $('#c_body').value, copy: $('#c_copy').value, aprendizado: $('#c_apr').value, score: sc === '' ? null : Number(sc) };
+    const r = await acao(() => api(`/api/cr/criativos/${enc(c.id)}`, { method: 'PATCH', body }), 'Ficha salva.');
+    if (r !== undefined) { await recarregar(); route(); abrirFicha(c.id); }
   };
+  const carregarApr = () => api(`/api/cr/aprendizados?criativo=${enc(c.id)}`).then((r) => { const el = $('#g_apr'); if (el) { el.className = ''; el.innerHTML = listaAprendizados(r) || '<div class="fraco">Nenhum ainda.</div>'; } }).catch((e) => { const el = $('#g_apr'); if (el) el.textContent = e.message; });
+  carregarApr();
   try {
-    const serie = await api(`/api/cr/criativos/${encodeURIComponent(c.id)}/serie`);
-    const el = $('#serie'); if (!el) return;
-    if (!serie.length) { el.textContent = 'Sem métricas ainda (o sync da Meta roda todo dia às 6h; vendas chegam pelo webhook).'; return; }
-    const max = Math.max(...serie.map((d) => Math.max(d.receita, d.gasto)), 1);
-    el.className = ''; el.innerHTML = `<div class="small muted">Receita (azul) e gasto (cinza) por dia · ${serie.length} dias</div><div class="spark">${serie.map((d) => `<i title="${fmtData(d.dia)}: ${d.vendas} vendas, ${fmtR(d.receita)} / gasto ${fmtR(d.gasto)}" style="height:${Math.max(2, (d.receita / max) * 48)}px;${d.receita < d.gasto ? 'background:#B0B8C0' : ''}"></i>`).join('')}</div>`;
-  } catch { const el = $('#serie'); if (el) el.textContent = ''; }
+    const serie = await api(`/api/cr/criativos/${enc(c.id)}/serie`);
+    const el = $('#g_serie'); if (!el) return;
+    if (!serie.length) { el.textContent = 'Sem métricas diárias ainda (o sync da Meta roda às 06:10; vendas chegam pelo webhook).'; return; }
+    el.innerHTML = `<div class="row"><span>Dia a dia · ${serie.length} dias</span><span class="grow"></span><span class="legenda"><span><i style="background:var(--verde)"></i>Receita</span><span><i style="background:var(--line2);height:8px"></i>Gasto</span></span></div>${sparkline(serie)}`;
+  } catch { const el = $('#g_serie'); if (el) el.textContent = ''; }
+}
+function sparkline(serie) {
+  const pts = serie.slice(-60), W = 670, H = 70, n = pts.length;
+  const max = Math.max(1, ...pts.map((d) => Math.max(d.receita, d.gasto)));
+  const bw = W / n;
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${pts.map((d, i) => {
+    const hg = (d.gasto / max) * (H - 2), hr = (d.receita / max) * (H - 2);
+    return `<g><title>${fmtData(d.dia)} · ${d.vendas} vendas · receita ${fmtR(d.receita)} · gasto ${fmtR(d.gasto)}</title>
+      <rect x="${i * bw + bw * 0.1}" y="${H - hg}" width="${bw * 0.8}" height="${hg}" fill="#2E3540" rx="1"/>
+      <rect x="${i * bw + bw * 0.28}" y="${H - hr}" width="${bw * 0.44}" height="${hr}" fill="#2EE59D" rx="1"/></g>`;
+  }).join('')}</svg>`;
 }
 
-function novoCriativo() {
-  modal(`<h2>Novo criativo</h2><div class="stack">
-    <div class="form3"><label class="f"><span>Oferta</span><select id="n_of">${opts(S.d.ofertas.map((o) => [o.id, o.nome]), S.f.oferta, 'Escolha')}</select></label>
-    <label class="f"><span>Leva</span><select id="n_leva"><option value="">—</option></select></label>
-    <label class="f"><span>Status inicial</span><select id="n_st">${opts([['fila', 'Fila'], ['briefing', 'Briefing'], ['aprovado', 'Aprovado'], ['no_ar', 'Já está no ar']], 'fila')}</select></label></div>
-    <label class="f"><span>ID = nome que o anúncio terá no Meta <em>(OFERTA-Lx-ADn-Hn-Bn-Fn)</em></span><input type="text" id="n_id" placeholder="CFAM-L6-UGC-01"></label>
-    <div class="form3"><label class="f"><span>Tipo</span><select id="n_tipo">${opts(Object.entries(TIPO_NOME), 'modelagem')}</select></label>
-    <label class="f"><span>Formato</span><select id="n_fmt">${opts(FORMATOS, '', '—')}</select></label>
-    <label class="f"><span>Criativo-pai</span><input type="text" id="n_pai" list="ids2"></label></div>
-    <datalist id="ids2">${S.d.criativos.filter((x) => x.status === 'vencedor').map((x) => `<option value="${esc(x.id)}">`).join('')}</datalist>
-    <div class="grid2"><label class="f"><span>Ângulo</span><input type="text" id="n_ang"></label><label class="f"><span>Hook</span><input type="text" id="n_hook"></label></div>
-    <label class="f"><span>Copy / roteiro</span><textarea id="n_copy" rows="4"></textarea></label>
-    <div class="row"><button class="btn" id="n_ok">Criar</button></div></div>`);
-  const levas = () => { $('#n_leva').innerHTML = '<option value="">—</option>' + opts(S.d.levas.filter((l) => l.ofertaId === $('#n_of').value && l.status !== 'encerrada').map((l) => [l.id, l.id]), ''); };
-  $('#n_of').onchange = levas; levas();
+// ---------------------------------------------------------------- 9. Novo criativo + modais
+function modal(html) {
+  fecharModal();
+  const m = document.createElement('div'); m.className = 'modal'; m.innerHTML = `<div class="box">${html}</div>`;
+  document.body.appendChild(m);
+  m.onclick = (e) => { if (e.target === m || e.target.closest('[data-fecha]')) fecharModal(); };
+  setTimeout(() => $('input:not([disabled]), textarea, select', m)?.focus(), 30);
+  return m;
+}
+function fecharModal() { $('.modal')?.remove(); }
+function pedirNota(titulo, rotulo) {
+  return new Promise((resolve) => {
+    const m = modal(`<h2>${esc(titulo)}</h2><div class="form"><label class="f"><span>${esc(rotulo)}</span><textarea id="pn_txt" rows="4"></textarea></label>
+      <div class="row"><span class="grow"></span><button class="btn ghost" id="pn_x">Cancelar</button><button class="btn" id="pn_ok">Confirmar</button></div></div>`);
+    let feito = false;
+    const fim = (v) => { if (feito) return; feito = true; fecharModal(); resolve(v); };
+    $('#pn_x').onclick = () => fim(null);
+    m.addEventListener('click', (e) => { if (e.target === m) fim(null); });
+    $('#pn_ok').onclick = () => { const v = $('#pn_txt').value.trim(); if (!v) { $('#pn_txt').focus(); return toast('Escreva a nota.', true); } fim(v); };
+    $('#pn_txt').onkeydown = (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) $('#pn_ok').click(); };
+    new MutationObserver((_, ob) => { if (!document.body.contains(m)) { ob.disconnect(); fim(null); } }).observe(document.body, { childList: true });
+  });
+}
+function novoCriativo(pre = {}) {
+  modal(`<h2>${pre.tipo === 'variacao' ? `Variação de ${esc(pre.paiId)}` : 'Novo criativo'}</h2><div class="form">
+    <div class="f2"><label class="f"><span>Oferta</span><select id="n_of">${opts(S.d.ofertas.map((o) => [o.id, o.nome]), pre.ofertaId, 'Escolha')}</select></label>
+      <label class="f"><span>Leva</span><select id="n_leva"></select></label></div>
+    <label class="f"><span>ID <em>— nome que o anúncio terá no Meta; comece pela sigla da oferta</em></span><input id="n_id" placeholder="CFAM-L8-UGC-01"></label>
+    <div class="f3"><label class="f"><span>Tipo</span><select id="n_tipo">${opts(Object.entries(TIPO_NOME), pre.tipo || 'modelagem')}</select></label>
+      <label class="f"><span>Formato</span><select id="n_fmt">${opts(FORMATOS, pre.formato, '—')}</select></label>
+      <label class="f"><span>Status inicial</span><select id="n_st">${opts([['fila', 'Fila'], ['briefing', 'Briefing'], ['no_ar', 'Já está no ar']], 'fila')}</select></label></div>
+    <label class="f"><span>Criativo-pai</span><input id="n_pai" list="n_pais" value="${esc(pre.paiId || '')}"></label><datalist id="n_pais"></datalist>
+    <div class="f2"><label class="f"><span>Ângulo</span><input id="n_ang" value="${esc(pre.angulo || '')}"></label><label class="f"><span>Hook</span><input id="n_hook"></label></div>
+    <label class="f"><span>Copy</span><textarea id="n_copy" rows="4"></textarea></label>
+    <div class="row"><span class="grow"></span><button class="btn ghost" data-fecha>Cancelar</button><button class="btn" id="n_ok">Criar</button></div></div>`);
+  const sync = () => {
+    const of = $('#n_of').value;
+    $('#n_leva').innerHTML = opts(S.d.levas.filter((l) => l.ofertaId === of && l.status !== 'encerrada').map((l) => [l.id, `${l.id} · ${LEVA_NOME[l.status] || l.status}`]), pre.levaId, '—');
+    $('#n_pais').innerHTML = S.d.criativos.filter((x) => x.ofertaId === of && x.status === 'vencedor').map((x) => `<option value="${esc(x.id)}">`).join('');
+    if (of && !$('#n_id').value) $('#n_id').placeholder = `${of}-L?-UGC-01`;
+  };
+  $('#n_of').onchange = sync; sync();
+  $('#n_leva').onchange = (e) => { if (e.target.value && !$('#n_id').value) $('#n_id').value = e.target.value + '-'; };
   $('#n_ok').onclick = async () => {
-    try { const c = await api('/api/cr/criativos', { method: 'POST', body: { id: $('#n_id').value, ofertaId: $('#n_of').value, levaId: $('#n_leva').value, status: $('#n_st').value, tipo: $('#n_tipo').value, formato: $('#n_fmt').value, paiId: $('#n_pai').value, angulo: $('#n_ang').value, hook: $('#n_hook').value, copy: $('#n_copy').value } }); fecharModal(); await recarregar(); route(); toast(`${c.id} criado.`); }
-    catch (e) { toast(e.message, true); }
+    const id = $('#n_id').value.trim(); if (!id) return toast('Dê o ID (nome do anúncio).', true);
+    const body = { id, ofertaId: $('#n_of').value, levaId: $('#n_leva').value || undefined, tipo: $('#n_tipo').value, formato: $('#n_fmt').value || undefined, paiId: $('#n_pai').value.trim() || undefined, angulo: $('#n_ang').value, hook: $('#n_hook').value, copy: $('#n_copy').value, status: $('#n_st').value };
+    const r = await acao(() => api('/api/cr/criativos', { method: 'POST', body }), `${id} criado.`);
+    if (r !== undefined) { fecharModal(); await recarregar(); route(); }
   };
 }
 
-// ---------------------------------------------------------------- ajustes
+// ---------------------------------------------------------------- 10. Ajustes
 async function pageAjustes() {
-  const R = S.d.regras;
-  $('#main').innerHTML = `<div class="head"><div><h1>Ajustes</h1><div class="muted">Contas do Meta, webhook da Lastlink, regras do veredito e importação da semente.</div></div></div>
-  <div class="aj">
-    <div class="panel"><header><h2>Meta Ads</h2><span class="small ${S.d.metaConfigurado ? '' : 'muted'}">${S.d.meta?.fonte === 'env' ? 'token fixo na Netlify' : S.d.meta ? `conectada como ${esc(S.d.meta.usuario || '?')} · renova sozinha (vence ${fmtData(S.d.meta.exp)})` : 'não conectada'}</span></header><div class="body">
-      <details ${S.d.metaConfigurado ? '' : 'open'}><summary class="small">Conectar / trocar o token da Meta</summary>
-        <div class="small muted" style="margin:6px 0">Abra o <a href="https://developers.facebook.com/tools/explorer/?app_id=2091305061809464" target="_blank">Graph API Explorer</a>, escolha o app "Inteligência Artificial", adicione a permissão <code>ads_read</code>, clique em "Generate Access Token" e cole aqui. O app troca por um token de 60 dias e renova sozinho.</div>
-        <div class="row"><input type="password" id="a_tok" placeholder="EAAB…" style="flex:1"><button class="btn small" id="a_conectar">Conectar</button></div>
-      </details>
-      <div id="a_lista" class="small muted">${S.d.metaConfigurado ? 'carregando as contas do token…' : 'Cadastre o token pra listar as contas.'}</div>
-      <label class="f"><span>Contas ativas <em>(IDs, vírgula; a lista acima preenche isso)</em></span><input type="text" id="a_contas" value="${esc(S.d.contas.join(', '))}" placeholder="1297287845818107, 1684145772892649"></label>
-      <div class="row"><button class="btn small" id="a_salvar">Salvar contas</button><span class="grow"></span><select id="a_dias">${opts([['3', 'últimos 3 dias'], ['7', 'últimos 7 dias'], ['14', 'últimos 14 dias'], ['31', 'últimos 31 dias']], '3')}</select><button class="btn ghost small" id="a_sync">Sincronizar agora</button><button class="btn ghost small" id="a_ver">Rodar veredito</button></div>
-      <div class="small muted">O cron roda todo dia às 06:10 (3 dias). Pra puxar meses antigos, sincronize 31 dias por vez com a data final (abaixo).</div>
-      <div class="row"><label class="f"><span>Data final <em>(histórico)</em></span><input type="date" id="a_ate"></label><button class="btn ghost small" id="a_hist">Puxar 31 dias até essa data (em 5 janelas)</button></div>
-      <div id="a_res" class="small"></div>
-    </div></div>
-    <div class="panel"><header><h2>Webhook da Lastlink</h2></header><div class="body">
-      <div class="small">Na Lastlink, em Integrações › Webhooks, cadastre este endereço para os eventos <b>Purchase_Order_Confirmed</b>, <b>Payment_Refund</b> e <b>Payment_Chargeback</b>, em todos os produtos:</div>
-      <pre class="code">${esc(S.d.webhook || '')}</pre>
-      <div class="small muted">A venda é ligada ao criativo pelo <code>utm_content</code> (que já é o nome do anúncio nos seus links). Vendas sem criativo conhecido ficam guardadas e são ligadas depois (botão abaixo).</div>
-      <div class="row"><button class="btn ghost small" id="a_religar">Religar vendas e anúncios sem par</button><button class="btn ghost small" id="a_log">Ver log</button></div>
-      <div id="a_log_out"></div>
-    </div></div>
-    <div class="panel"><header><h2>Regras do veredito</h2></header><div class="body">
-      <div class="form3">
-        <label class="f"><span>Horas no ar antes do veredito</span><input type="number" id="r_h" value="${R.horasVeredito}"></label>
-        <label class="f"><span>Gasto mínimo (R$) pra decidir</span><input type="number" id="r_g" value="${R.gastoMin}"></label>
-        <label class="f"><span>ou vendas mínimas</span><input type="number" id="r_v" value="${R.vendasMin}"></label>
-        <label class="f"><span>ROAS: segue a partir de</span><input type="number" step="0.05" id="r_s" value="${R.roasSegue}"></label>
-        <label class="f"><span>ROAS: morre abaixo de</span><input type="number" step="0.05" id="r_m" value="${R.roasMorre}"></label>
-        <label class="f"><span>Vendas pra virar vencedor</span><input type="number" id="r_w" value="${R.vencedorVendas}"></label>
-        <label class="f"><span>Fadiga: queda do ROAS 7d vs 30d</span><input type="number" step="0.05" id="r_f" value="${R.fadigaQueda}"></label>
-        <label class="f"><span>Filhos abertos por vencedor</span><input type="number" id="r_c" value="${R.filhos}"></label>
-        <label class="f"><span>Dias sem vencedor = oferta em risco</span><input type="number" id="r_d" value="${R.diasRisco}"></label>
+  if (!admin()) { $('#main').innerHTML = '<div class="vazio"><b>Só o gestor mexe nos ajustes.</b>Conexão da Meta, webhook e regras ficam com o Kaian.</div>'; return; }
+  const R = S.d.regras, M = S.d.meta;
+  const ult = (k, t) => (S.d[k] ? `<span class="fraco" style="font-size:12px">${t}: ${fmtDH(S.d[k].em)}</span>` : '');
+  $('#main').innerHTML = `<div class="aj">
+    <div class="card"><header><h2>Meta Ads</h2><span class="grow"></span><span class="estado ${M ? 'verde' : 'amar'}">${M?.fonte === 'env' ? '● token fixo na Netlify' : M ? `● conectada${M.usuario ? ' como ' + esc(M.usuario) : ''}` : '● não conectada'}</span></header>
+      ${M?.exp ? `<div class="fraco" style="font-size:12.5px">Renova sozinha · vence ${fmtData(M.exp)}</div>` : ''}
+      <details ${M ? '' : 'open'}><summary style="cursor:pointer;font-size:13px">Conectar / trocar o token</summary>
+        <div class="fraco" style="font-size:12.5px;margin:8px 0">No <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener">Graph API Explorer</a>, escolha o app, adicione a permissão <code>ads_read</code>, clique em "Generate Access Token" e cole aqui. O app troca por um token de 60 dias e renova sozinho.</div>
+        <div class="row"><input type="password" id="m_tok" placeholder="EAAB…" style="flex:1" autocomplete="off"><button class="btn sm" id="m_con">Conectar</button></div></details>
+      <div id="m_contas" class="fraco" style="font-size:12.5px">${M ? 'carregando as contas…' : 'Conecte para listar as contas.'}</div>
+      <div class="row"><button class="btn ghost sm" id="m_sync">Sincronizar 3 dias</button><span class="grow"></span><input type="date" id="m_ate" title="Data final"><button class="btn ghost sm" id="m_hist">Puxar histórico até a data</button></div>
+      <div id="m_res" style="font-size:12.5px"></div>${ult('ultimoSync', 'último sync')}
+    </div>
+    <div class="card"><header><h2>Lastlink</h2></header>
+      <div style="font-size:13px">Em Integrações › Webhooks, cadastre esta URL em todos os produtos, com 3 eventos: <b>Purchase_Order_Confirmed</b>, <b>Payment_Refund</b> e <b>Payment_Chargeback</b>.</div>
+      <pre class="code" id="w_url">${esc(S.d.webhook || '—')}</pre>
+      <div class="row"><button class="btn sm" id="w_cop">Copiar URL</button><button class="btn ghost sm" id="w_log">Ver log</button></div>
+      <div class="fraco" style="font-size:12px">A venda liga ao criativo pelo <code>utm_content</code> (= nome do anúncio).</div>
+      <div id="w_out"></div>
+    </div>
+    <div class="card"><header><h2>Regras do veredito</h2></header><div class="form">
+      <div class="f3">
+        <label class="f"><span>Horas no ar</span><input type="number" id="r_horasVeredito" value="${R.horasVeredito}"></label>
+        <label class="f"><span>Gasto mín. (R$)</span><input type="number" id="r_gastoMin" value="${R.gastoMin}"></label>
+        <label class="f"><span>ou vendas mín.</span><input type="number" id="r_vendasMin" value="${R.vendasMin}"></label>
+        <label class="f"><span>ROAS segue ≥</span><input type="number" step="0.05" id="r_roasSegue" value="${R.roasSegue}"></label>
+        <label class="f"><span>ROAS morre &lt;</span><input type="number" step="0.05" id="r_roasMorre" value="${R.roasMorre}"></label>
+        <label class="f"><span>Vendas p/ vencedor</span><input type="number" id="r_vencedorVendas" value="${R.vencedorVendas}"></label>
+        <label class="f"><span>Fadiga: queda</span><input type="number" step="0.05" id="r_fadigaQueda" value="${R.fadigaQueda}"></label>
+        <label class="f"><span>Filhos por vencedor</span><input type="number" id="r_filhos" value="${R.filhos}"></label>
+        <label class="f"><span>Dias p/ em risco</span><input type="number" id="r_diasRisco" value="${R.diasRisco}"></label>
       </div>
-      <div class="row"><button class="btn small" id="r_ok">Salvar regras</button></div>
-    </div></div>
-    <div class="panel"><header><h2>Importar semente (CSV)</h2></header><div class="body">
-      <div class="small">Arquivos opcionais, com cabeçalho na primeira linha: <b>ofertas.csv</b> (id, nome, familia, estado, prefixos, produtos), <b>criativos.csv</b> (id, ofertaId, tipo, paiId, formato, status, noArEm, angulo, hook, aprendizado), <b>vendas.csv</b> (id, criativoId, ofertaId, utmContent, valor, produto, pagoEm, reembolso) e <b>metricas.csv</b> (adId, dia, criativoId, gasto, impressoes, cliques, lpv, ic, video3s, video75). Ofertas que não existirem precisam ser criadas antes.</div>
-      <div class="form3"><label class="f"><span>ofertas.csv</span><input type="file" id="i_o" accept=".csv"></label><label class="f"><span>criativos.csv</span><input type="file" id="i_c" accept=".csv"></label><label class="f"><span>vendas.csv</span><input type="file" id="i_v" accept=".csv"></label><label class="f"><span>metricas.csv</span><input type="file" id="i_m" accept=".csv"></label></div>
-      <div class="row"><button class="btn small" id="i_ok">Importar</button><span id="i_res" class="small"></span></div>
-    </div></div>
+      <div class="fraco" style="font-size:12px">No ar há ≥ ${R.horasVeredito}h com ≥ R$${R.gastoMin} ou ≥ ${R.vendasMin} vendas: ROAS ≥ ${R.roasSegue} segue · &lt; ${R.roasMorre} morre · entre, pede variação.</div>
+      <div class="row"><span class="grow"></span><button class="btn sm" id="r_ok">Salvar regras</button></div></div>
+    </div>
+    <div class="card"><header><h2>Agentes</h2></header>
+      <div class="row"><button class="btn ghost sm" data-ag="analista">Rodar Analista agora</button><button class="btn ghost sm" data-ag="copy">Rodar Copy agora</button><button class="btn ghost sm" data-ag="veredito">Rodar veredito</button><button class="btn ghost sm" data-ag="religar">Religar</button></div>
+      <div style="display:grid;gap:2px">${ult('ultimoVeredito', 'último veredito')}${ult('ultimoAnalista', 'último Analista')}${ult('ultimoCopy', 'último Copy')}</div>
+      <div id="ag_out" style="font-size:12.5px"></div>
+      <details style="margin-top:6px"><summary class="fraco" style="cursor:pointer;font-size:12px">Importar semente</summary>
+        <div class="fraco" style="font-size:12px;margin:8px 0">CSVs com cabeçalho: ofertas (id, nome, familia, estado, prefixos, produtos), criativos (id, ofertaId, tipo, paiId, formato, status, noArEm, angulo, hook, aprendizado), vendas (id, criativoId, ofertaId, utmContent, valor, produto, pagoEm, reembolso), metricas (adId, dia, criativoId, gasto, impressoes, cliques, lpv, ic, video3s, video75).</div>
+        <div class="f2"><label class="f"><span>ofertas.csv</span><input type="file" id="i_o" accept=".csv"></label><label class="f"><span>criativos.csv</span><input type="file" id="i_c" accept=".csv"></label><label class="f"><span>vendas.csv</span><input type="file" id="i_v" accept=".csv"></label><label class="f"><span>metricas.csv</span><input type="file" id="i_m" accept=".csv"></label></div>
+        <div class="row" style="margin-top:8px"><button class="btn sm" id="i_ok">Importar</button><span id="i_res" style="font-size:12.5px"></span></div></details>
+    </div>
   </div>`;
-  const out = (el, txt, erro) => { $(el).textContent = txt; $(el).style.color = erro ? 'var(--erro)' : ''; };
-  if (S.d.metaConfigurado) {
-    try {
-      const contas = await api('/api/cr/meta/contas');
-      const sel = new Set(S.d.contas.map(String));
-      $('#a_lista').className = ''; $('#a_lista').innerHTML = `<div class="small muted" style="margin-bottom:6px">Contas que o token enxerga (${contas.length}). Marque as que entram no sync, como na UTMIFY:</div><div class="chips">${contas.map((c) => `<button class="chip ${sel.has(String(c.id)) ? 'on' : ''}" data-c="${esc(c.id)}" title="${esc(c.status)} · ${esc(c.moeda)}${c.bm ? ' · ' + esc(c.bm) : ''}">${esc(c.nome)} <small>${esc(c.id)}</small></button>`).join('')}</div>`;
-      $$('#a_lista .chip').forEach((b) => b.onclick = () => { b.classList.toggle('on'); $('#a_contas').value = $$('#a_lista .chip.on').map((x) => x.dataset.c).join(', '); });
-    } catch (e) { out('#a_lista', e.message, true); }
+  const out = (sel, txt, erro) => { const el = $(sel); if (el) { el.textContent = txt; el.style.color = erro ? 'var(--verm)' : ''; } };
+  if (M) {
+    api('/api/cr/meta/contas').then((contas) => {
+      const el = $('#m_contas'); if (!el) return;
+      const ativas = new Set(S.d.contas.map(String));
+      el.className = ''; el.innerHTML = `<div class="cap" style="margin-bottom:6px">Contas que entram no sync</div><div class="switches">${contas.map((c) => `<label class="sw ${ativas.has(String(c.id)) ? 'on' : ''}" data-c="${esc(c.id)}"><span class="k"></span><span>${esc(c.nome)} <small>${esc(c.id)} · ${esc(c.status)}${c.bm ? ' · ' + esc(c.bm) : ''}</small></span></label>`).join('') || '<span class="fraco">O token não enxerga nenhuma conta.</span>'}</div>`;
+      $$('.sw', el).forEach((s) => s.onclick = async (e) => {
+        e.preventDefault(); s.classList.toggle('on');
+        const ids = $$('.sw.on', el).map((x) => x.dataset.c);
+        const r = await acao(() => api('/api/cr/config', { method: 'POST', body: { contas: ids } }), 'Contas salvas.');
+        if (r === undefined) s.classList.toggle('on'); else S.d.contas = ids;
+      });
+    }).catch((e) => out('#m_contas', e.message, true));
   }
-  $('#a_conectar').onclick = async () => { try { const r = await api('/api/cr/meta/conectar', { method: 'POST', body: { token: $('#a_tok').value } }); toast(`Meta conectada${r.usuario ? ' como ' + r.usuario : ''}.`); await recarregar(); pageAjustes(); } catch (e) { toast(e.message, true); } };
-  $('#a_salvar').onclick = async () => { try { await api('/api/cr/config', { method: 'POST', body: { contas: $('#a_contas').value.split(',') } }); await recarregar(); toast('Contas salvas.'); } catch (e) { toast(e.message, true); } };
-  const sync = async (body) => { out('#a_res', 'sincronizando…'); try { const r = await api('/api/cr/sync', { method: 'POST', body }); out('#a_res', r.segundoPlano ? `${r.desde} → ${r.ate}: ${r.aviso}` : `${r.desde} → ${r.ate}: ${r.linhas} linhas, ${r.anuncios} anúncios, ${r.criados} criativos novos, ${r.semPar} sem par, ${r.ligados} religados.`); await recarregar(); contadores(); } catch (e) { out('#a_res', e.message, true); } };
-  $('#a_sync').onclick = () => sync({ dias: Number($('#a_dias').value) });
-  $('#a_hist').onclick = async () => {
-    const ate = $('#a_ate').value; if (!ate) return toast('Escolha a data final.', true);
-    // 31 dias em 5 janelas de 7 (cada chamada precisa caber em 60 s).
-    let fim = new Date(ate + 'T12:00');
-    for (let i = 0; i < 5; i++) { const ini = new Date(fim); ini.setDate(fim.getDate() - 6); await sync({ desde: ini.toLocaleDateString('en-CA'), ate: fim.toLocaleDateString('en-CA') }); fim = new Date(ini); fim.setDate(ini.getDate() - 1); }
+  $('#m_con').onclick = async () => { const r = await acao(() => api('/api/cr/meta/conectar', { method: 'POST', body: { token: $('#m_tok').value.trim() } })); if (r !== undefined) { toast(`Meta conectada${r.usuario ? ' como ' + r.usuario : ''}.`); await recarregar(); route(); } };
+  const sync = async (body) => {
+    out('#m_res', 'sincronizando…');
+    try { const r = await api('/api/cr/sync', { method: 'POST', body }); out('#m_res', r.segundoPlano ? `${r.desde} → ${r.ate}: ${r.aviso || 'rodando em segundo plano'}` : `${r.desde} → ${r.ate}: ${r.linhas} linhas, ${r.anuncios} anúncios, ${r.criados} criativos novos, ${r.semPar} sem par.`); await recarregar(); menu('ajustes'); }
+    catch (e) { out('#m_res', e.message, true); }
   };
-  $('#a_ver').onclick = async () => { out('#a_res', 'rodando veredito…'); try { const r = await api('/api/cr/veredito', { method: 'POST' }); out('#a_res', r.mudancas.length ? r.mudancas.join(' · ') : 'Nenhuma mudança.'); await recarregar(); contadores(); } catch (e) { out('#a_res', e.message, true); } };
-  $('#a_religar').onclick = async () => { try { const r = await api('/api/cr/religar', { method: 'POST' }); toast(`${r.ligados} ligados.`); await recarregar(); } catch (e) { toast(e.message, true); } };
-  $('#a_log').onclick = async () => { const l = await api('/api/cr/log'); $('#a_log_out').innerHTML = `<div class="hist">${l.map((x) => `<div>${fmtDH(x.em)} · <b>${esc(x.tipo)}</b> · ${esc(x.resumo || '')}</div>`).join('')}</div>`; };
-  $('#r_ok').onclick = async () => { try { await api('/api/cr/config', { method: 'POST', body: { regras: { horasVeredito: +$('#r_h').value, gastoMin: +$('#r_g').value, vendasMin: +$('#r_v').value, roasSegue: +$('#r_s').value, roasMorre: +$('#r_m').value, vencedorVendas: +$('#r_w').value, fadigaQueda: +$('#r_f').value, filhos: +$('#r_c').value, diasRisco: +$('#r_d').value } } }); await recarregar(); toast('Regras salvas.'); } catch (e) { toast(e.message, true); } };
+  $('#m_sync').onclick = () => sync({ dias: 3 });
+  $('#m_hist').onclick = () => { const ate = $('#m_ate').value; if (!ate) return toast('Escolha a data final.', true); const d = new Date(ate + 'T12:00'); d.setDate(d.getDate() - 30); sync({ desde: d.toLocaleDateString('en-CA'), ate }); };
+  $('#w_cop').onclick = async () => { try { await navigator.clipboard.writeText(S.d.webhook || ''); toast('URL copiada.'); } catch { toast('Não consegui copiar; selecione o texto.', true); } };
+  $('#w_log').onclick = async () => { const l = await acao(() => api('/api/cr/log')); if (l) $('#w_out').innerHTML = `<div class="log">${l.map((x) => `<div>${fmtDH(x.em)} · <b>${esc(x.tipo)}</b> · ${esc(x.resumo || '')}</div>`).join('') || 'vazio'}</div>`; };
+  $('#r_ok').onclick = async () => {
+    const regras = Object.fromEntries(Object.keys(R).filter((k) => $('#r_' + k)).map((k) => [k, Number($('#r_' + k).value)]));
+    const r = await acao(() => api('/api/cr/config', { method: 'POST', body: { regras } }), 'Regras salvas.');
+    if (r !== undefined) { await recarregar(); route(); }
+  };
+  $$('[data-ag]').forEach((b) => b.onclick = async () => {
+    const ag = b.dataset.ag; b.disabled = true; out('#ag_out', 'rodando…');
+    try {
+      const r = await api(`/api/cr/${ag}`, { method: 'POST' });
+      out('#ag_out', r.aviso || (r.mudancas ? (r.mudancas.length ? r.mudancas.join(' · ') : 'Nenhuma mudança.') : r.ligados !== undefined ? `${r.ligados} ligados.` : 'Feito.'));
+      await recarregar(); menu('ajustes');
+    } catch (e) { out('#ag_out', e.message, true); }
+    b.disabled = false;
+  });
   $('#i_ok').onclick = async () => {
-    const ler = async (el) => { const f = $(el).files[0]; return f ? parseCsv(await f.text()) : []; };
+    const ler = async (sel) => { const f = $(sel).files[0]; return f ? parseCsv(await f.text()) : []; };
     out('#i_res', 'lendo…');
     try {
       const [ofertas, criativos, vendas, metricas] = await Promise.all([ler('#i_o'), ler('#i_c'), ler('#i_v'), ler('#i_m')]);
       const lista = (v) => { try { const j = JSON.parse(v); return Array.isArray(j) ? j : []; } catch { return String(v || '').split(',').map((x) => x.trim()).filter(Boolean); } };
       if (ofertas.length) await api('/api/cr/importar', { method: 'POST', body: { ofertas: ofertas.map((o) => ({ ...o, prefixos: lista(o.prefixos), produtos: lista(o.produtos) })) } });
-      let tot = { criativos: 0, vendas: 0, metricas: 0, ignorados: 0 };
-      const lote = 1500;
-      for (let i = 0; i < Math.max(criativos.length, vendas.length, metricas.length, 1); i += lote) {
-        const r = await api('/api/cr/importar', { method: 'POST', body: { criativos: criativos.slice(i, i + lote), vendas: vendas.slice(i, i + lote), metricas: metricas.slice(i, i + lote) } });
+      const tot = { criativos: 0, vendas: 0, metricas: 0, ignorados: 0 };
+      for (let i = 0; i < Math.max(criativos.length, vendas.length, metricas.length, 1); i += 1500) {
+        const r = await api('/api/cr/importar', { method: 'POST', body: { criativos: criativos.slice(i, i + 1500), vendas: vendas.slice(i, i + 1500), metricas: metricas.slice(i, i + 1500) } });
         for (const k of Object.keys(tot)) tot[k] += r[k] || 0;
         out('#i_res', `importando… ${tot.criativos} criativos, ${tot.vendas} vendas, ${tot.metricas} métricas`);
       }
-      out('#i_res', `Pronto: ${tot.criativos} criativos, ${tot.vendas} vendas, ${tot.metricas} métricas (${tot.ignorados} ignorados por oferta desconhecida).`);
-      await recarregar(); contadores();
+      out('#i_res', `Pronto: ${tot.criativos} criativos, ${tot.vendas} vendas, ${tot.metricas} métricas (${tot.ignorados} ignorados).`);
+      await recarregar(); menu('ajustes');
     } catch (e) { out('#i_res', e.message, true); }
   };
 }
@@ -443,7 +835,7 @@ function parseCsv(txt) {
   }
   if (cell || row.length) { row.push(cell); rows.push(row); }
   const [h, ...body] = rows.filter((r) => r.some((c) => c !== ''));
-  return body.map((r) => Object.fromEntries(h.map((k, i) => [k.trim(), r[i] ?? ''])));
+  return h ? body.map((r) => Object.fromEntries(h.map((k, i) => [k.trim(), r[i] ?? '']))) : [];
 }
 
 boot();
