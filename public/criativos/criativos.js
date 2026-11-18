@@ -283,7 +283,7 @@ function pageVisao() {
       <div class="of3-v num">${fmtR(o.receita7)}${varr !== null ? ` <span class="delta ${varr >= 0 ? 'verde' : 'verm'}">${varr >= 0 ? '▲' : '▼'} ${Math.abs(varr)}%</span>` : ''}</div>
       <div class="mini">
         <div><div class="cap">Gasto</div><div class="v">${fmtR(g)}</div></div>
-        <div><div class="cap">ROAS</div><div class="v ${roasCls(roas)}">${fmtRoas(roas)}</div></div>
+        <div><div class="cap">ROAS</div><div class="v ${g < 50 ? 'fraco' : roasCls(roas)}" ${g < 50 && ok(roas) ? 'title="Gasto de menos de R$ 50: ROAS ainda não diz nada"' : ''}>${g < 50 && ok(roas) ? '—' : fmtRoas(roas)}</div></div>
         <div><div class="cap">Vencedores</div><div class="v">${o.vencedores}</div></div>
       </div>
       <div class="row"><a class="btn ghost sm" href="#/board?oferta=${enc(o.id)}">Ver no board</a><a class="btn ghost sm" href="#/ofertas/${enc(o.id)}">${o.proximaLeva ? `Próxima leva · ${fmtData(o.proximaLeva.data).slice(0, 5)}` : 'Planejar leva'}</a></div></div>`;
