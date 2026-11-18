@@ -3,6 +3,7 @@
 import crypto from 'node:crypto';
 import { contextoInterno } from '../../lib/api.mjs';
 import { syncMeta, rodarVeredito, renovarTokenMeta, tokenMeta } from '../../lib/criativos.mjs';
+import { syncLastlink, lastlinkConfigurada } from '../../lib/lastlink.mjs';
 
 export default async () => {
   const ctx = contextoInterno();
@@ -14,6 +15,7 @@ export default async () => {
   try {
     console.log('token', await renovarTokenMeta(ctx));
     if (contas.length && (await tokenMeta(ctx))) console.log('sync', await syncMeta(ctx, { desde, ate, contas }));
+    if (lastlinkConfigurada(ctx.env)) console.log('lastlink', await syncLastlink(ctx, { desde, ate }).catch((e) => e.message));
     console.log('veredito', (await rodarVeredito(ctx)).mudancas);
     // Analista roda em segundo plano (chamadas à IA passam dos 30 s desta função).
     const chave = crypto.createHmac('sha256', process.env.APP_SECRET || '').update('lastlink-criativos').digest('base64url').slice(0, 32);
