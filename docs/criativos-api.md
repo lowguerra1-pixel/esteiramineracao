@@ -97,7 +97,7 @@ Mesma regra dos chats de oferta do Controle de Levas: **primeiro a pesquisa da o
 | `PUT /biblioteca/:id {titulo, categoria, fonte, peso, consulteQuando, texto}` (gestor) | ficha escrita à mão (para o Chat 2 fichar material novo) |
 | `DELETE /biblioteca/:id` (gestor) | remove |
 | `GET /ofertas/:id/pesquisa` | `{ resumo, bruto, driveIds, sugeridos }` |
-| `POST /ofertas/:id/pesquisa {driveIds?, texto?}` (gestor) | importa a pesquisa (dos ids do Drive, dos já cadastrados, dos sugeridos para a sigla, ou de `texto` colado), guarda o bruto e pede à IA o **resumo em 6 camadas** (públicos, dores, desejos, crenças/objeções, linguagem literal, comportamento de compra, concorrência, formatos, mecanismos, evitar). Leva ~20 s. |
+| `POST /ofertas/:id/pesquisa {driveIds?, texto?}` (gestor) | importa a pesquisa (dos ids do Drive, dos já cadastrados, dos sugeridos para a sigla, ou de `texto` colado), guarda o bruto e pede à IA o **resumo em 6 camadas** (públicos, dores, desejos, crenças/objeções, linguagem literal, comportamento de compra, concorrência, formatos, mecanismos, evitar). Roda em segundo plano (202); resultado em `/log` e em `GET /ofertas/:id/pesquisa`, até 2 min. |
 
 Como o Copy escolhe as fichas (1 a 3, pelo tipo do card e pela hipótese da leva): `zero` → ângulo + mecanismo; `variacao` → hook, formato, body ou ângulo conforme a hipótese fala em gancho/formato/estrutura/ângulo; `modelagem` → body + planejar; formato `IMG/CAR` soma headline; `UGC` soma a ficha de pessoa falando; oferta em `validacao` soma a ficha de oferta nova. A lista completa está em `situacoes` no `GET /biblioteca`.
 
