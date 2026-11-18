@@ -365,3 +365,28 @@ insert into esteira_config (chave, valor) values
   ('cr_regras', '{"gastoMin":150,"vendasMin":5,"roasSegue":1.3,"roasMorre":1.0,"vencedorVendas":20,"fadigaQueda":0.3,"filhos":3,"horasVeredito":72,"diasRisco":14}'),
   ('cr_contas', '[]')
 on conflict (chave) do nothing;
+
+-- ---------------------------------------------------------------- Biblioteca de copy (fusão com o Controle de Levas)
+-- Fichas de estudo do REPERTORIO (Schwartz, Great Leads, Caples, Sugarman, Cashvertising, Arthur, Matheus…) + índice e vocabulário.
+-- O Diretor de Copy lê a pesquisa da oferta e 2–3 fichas antes de escrever cada card.
+create table if not exists esteira_cr_biblioteca (
+  id text primary key,                 -- nome do arquivo sem .md (ex.: lead-body--great-leads)
+  categoria text,                      -- angulo | formato | headline | hook | lead-body | mecanismo | oferta | oficio | pesquisa | prova-crenca | psicologia | guia
+  titulo text,
+  fonte text,
+  peso text,                           -- essencial | complementar
+  consulte_quando text,
+  drive_id text,
+  texto text not null,
+  atualizado_em timestamptz default now()
+);
+alter table esteira_cr_biblioteca enable row level security;
+
+alter table esteira_cr_ofertas add column if not exists pesquisa text;            -- pesquisa de público/formato (texto bruto, vindo do Drive)
+alter table esteira_cr_ofertas add column if not exists pesquisa_resumo text;     -- 6 camadas destiladas pela IA (é o que o Copy lê)
+alter table esteira_cr_ofertas add column if not exists pesquisa_drive jsonb default '[]';  -- ids dos arquivos no Drive
+alter table esteira_cr_ofertas add column if not exists teto_ic numeric;          -- teto de custo por IC (USD) da família, regra de corte do João
+alter table esteira_cr_levas add column if not exists codigo text;                -- id_leva do Controle de Levas (OFERTA-IMG/VID-AAAAMMDD)
+alter table esteira_cr_criativos add column if not exists base_pesquisa text;     -- "Base na pesquisa" do card: público, dor/desejo, crença/objeção, expressões usadas
+alter table esteira_cr_criativos add column if not exists fichas jsonb default '[]';        -- fichas do repertório consultadas
+alter table esteira_cr_criativos add column if not exists marcacoes jsonb default '{}';     -- marcações visuais do Editor: formato_hook, primeiro_frame, legenda, duracao_s, cortes_por_10s, produto_aparece_em_s, avatar
