@@ -57,7 +57,7 @@ Base: `https://esteiramineracao.netlify.app/api/cr`. Tudo em JSON. Erros vêm co
 | POST | `/importar` (gestor) | `{ ofertas?, criativos?, vendas?, metricas? }` (lotes de até 1500) |
 | GET | `/log` | Últimos 100 eventos (webhook, sync, veredito, analista, importacao) |
 | POST | `/lastlink/<token>` | **Webhook da Lastlink** (sem login, opcional: tempo real nos produtos onde estiver configurado). URL completa em `/bootstrap.webhook` |
-| POST | `/lastlink/sync {desde?, ate?}` (gestor) | **Vendas pela API da Lastlink** (`sales.list` do MCP): front, bumps, upsells, reembolsos e chargebacks, ligados ao criativo pelo `ad_id` do `utm_content`. Até 20 dias responde na hora; mais que isso vai para segundo plano (202). Precisa de `LASTLINK_CLIENT_ID/SECRET` na Netlify; `bootstrap.lastlinkConfigurada` diz se está. |
+| POST | `/vendas/sync {desde?, ate?}` (gestor) | **Vendas pela API da Lastlink** (`sales.list` do MCP): front, bumps, upsells, reembolsos e chargebacks, ligados ao criativo pelo `ad_id` do `utm_content`. Até 20 dias responde na hora; mais que isso vai para segundo plano (202). Precisa de `LASTLINK_CLIENT_ID/SECRET` na Netlify; `bootstrap.lastlinkConfigurada` diz se está. |
 
 ## Regras do veredito (editáveis em `/config.regras`)
 
