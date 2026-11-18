@@ -116,6 +116,7 @@ const TITULOS = { '': 'Visão geral', aprovar: 'Aprovar', board: 'Board', oferta
 
 async function boot() {
   if (!S.token) return renderLogin();
+  $('#app').innerHTML = `<div class="shell"><nav class="menu"></nav><div class="conteudo"><div class="sk" style="height:34px;width:220px;margin-bottom:24px"></div><div class="g4">${'<div class="sk" style="height:150px"></div>'.repeat(4)}</div><div class="sk" style="height:90px"></div></div></div>`;
   try { S.user = (await api('/api/eu')).usuario; await recarregar(); }
   catch (e) { if (S.token) { $('#app').innerHTML = `<div class="vazio"><b>Não consegui carregar os dados.</b>${esc(e.message)}<br><br><button class="btn" id="tenta">Tentar de novo</button></div>`; $('#tenta').onclick = boot; } return; }
   shell(); route();
@@ -124,9 +125,10 @@ async function boot() {
 function shell() {
   $('#app').innerHTML = `<div class="shell">
     <nav class="menu" id="menu"></nav>
-    <div class="conteudo"><div class="topo"><h1 id="titulo"></h1><span class="grow"></span><span class="vivo" id="vivo"></span><span class="quem"><b>${esc(S.user.nome)}</b><button class="link" id="sair">Sair</button></span></div>
+    <div class="conteudo"><div class="topo"><h1 id="titulo"></h1><span class="grow"></span><button class="busca" id="abrirBusca"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Buscar criativo, oferta…</span><kbd>${/Mac/.test(navigator.platform) ? '⌘' : 'Ctrl'} K</kbd></button><span class="vivo" id="vivo"></span><span class="quem"><b>${esc(S.user.nome)}</b><button class="link" id="sair">Sair</button></span></div>
     <div id="faixas"></div><main id="main"></main></div></div>`;
   $('#sair').onclick = sair;
+  $('#abrirBusca').onclick = paleta;
 }
 function menu(r) {
   const nRev = S.d.criativos.filter((c) => c.status === 'revisao').length;
@@ -177,6 +179,44 @@ document.addEventListener('click', (e) => {
   if (el && !e.defaultPrevented) { e.preventDefault(); abrirFicha(el.dataset.ficha); }
 });
 
+
+// ---------------------------------------------------------------- paleta de comandos (⌘K / Ctrl+K)
+function paleta() {
+  if (!S.d || $('.pal')) return;
+  const itens = [
+    ...ROTAS.map(([id, nome, ic]) => ({ g: 'Ir para', t: nome, ic: ICONES[ic], ir: () => (location.hash = '#/' + id) })),
+    { g: 'Ir para', t: 'Ajustes', ic: ICONES.engrenagem, ir: () => (location.hash = '#/ajustes') },
+    { g: 'Criar', t: 'Novo criativo', ic: '+', ir: () => novoCriativo({}) },
+    ...S.d.ofertas.map((o) => ({ g: 'Ofertas', t: o.nome, sub: `${o.id} · ${ESTADO_NOME[o.estado]}`, ic: ICONES.etiqueta, busca: o.id + ' ' + o.nome, ir: () => (location.hash = '#/ofertas/' + enc(o.id)) })),
+    ...S.d.criativos.map((c) => ({ g: 'Criativos', t: c.id, sub: `${STATUS_NOME[c.status]}${c.hook ? ' · ' + c.hook.slice(0, 60) : ''}`, ic: ICONES.tabela, busca: `${c.id} ${c.hook || ''} ${c.angulo || ''}`, ir: () => abrirFicha(c.id) })),
+  ];
+  const box = document.createElement('div'); box.className = 'pal';
+  box.innerHTML = `<div class="pal-box"><div class="pal-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="palq" placeholder="Digite um ID, hook, oferta ou tela…" autocomplete="off"><kbd>Esc</kbd></div><div class="pal-l" id="pall"></div><div class="pal-pe"><span><kbd>↑</kbd><kbd>↓</kbd> navegar</span><span><kbd>Enter</kbd> abrir</span></div></div>`;
+  document.body.appendChild(box);
+  let sel = 0, vis = [];
+  const desenha = () => {
+    const q = norm($('#palq').value).trim();
+    vis = (q ? itens.filter((x) => q.split(/\s+/).every((w) => norm(x.busca || x.t).includes(w))) : itens.filter((x) => x.g !== 'Criativos')).slice(0, 40);
+    sel = Math.min(sel, Math.max(0, vis.length - 1));
+    let g = '';
+    $('#pall').innerHTML = vis.map((x, i) => `${x.g !== g ? `<div class="pal-g">${(g = x.g)}</div>` : ''}<button class="pal-i ${i === sel ? 'on' : ''}" data-i="${i}"><span class="pal-ic">${x.ic}</span><span class="pal-t">${esc(x.t)}${x.sub ? `<small>${esc(x.sub)}</small>` : ''}</span></button>`).join('') || '<div class="pal-g" style="padding:18px">Nada encontrado.</div>';
+    $('.pal-i.on', box)?.scrollIntoView({ block: 'nearest' });
+    $$('.pal-i', box).forEach((b) => { b.onmousemove = () => { if (sel !== +b.dataset.i) { sel = +b.dataset.i; $$('.pal-i', box).forEach((x) => x.classList.toggle('on', x === b)); } }; b.onclick = () => abrir(+b.dataset.i); });
+  };
+  const fechar = () => box.remove();
+  const abrir = (i) => { const x = vis[i]; if (!x) return; fechar(); x.ir(); };
+  box.onclick = (e) => { if (e.target === box) fechar(); };
+  $('#palq').oninput = () => { sel = 0; desenha(); };
+  $('#palq').onkeydown = (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); sel = Math.min(vis.length - 1, sel + 1); desenha(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); sel = Math.max(0, sel - 1); desenha(); }
+    else if (e.key === 'Enter') { e.preventDefault(); abrir(sel); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); fechar(); }
+  };
+  desenha(); $('#palq').focus();
+}
+document.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); paleta(); } });
+
 // ---------------------------------------------------------------- 3. Visão geral
 function pageVisao() {
   const p = S.d.painel, R = S.d.regras;
@@ -187,64 +227,117 @@ function pageVisao() {
   const corR = !ok(n.roas) ? '' : n.roas >= 1.45 ? 'verde' : n.roas >= 1.3 ? 'amar' : 'verm';
   const per = S.f.periodo === '30' ? '30 dias' : '7 dias';
   const share = p.shareMaior;
-  const top = [...p.porOferta].sort((a, b) => b.receita7 - a.receita7).slice(0, 3);
-  const medalha = ['🥇', '🥈', '🥉'];
+  // receita da semana anterior: só existe para a janela de 7 dias
+  const ant = S.f.periodo === '30' ? null : (S.f.oferta ? p.porOferta.find((o) => o.id === S.f.oferta)?.receitaSemanaAnterior : p.porOferta.reduce((a, o) => a + (o.receitaSemanaAnterior || 0), 0));
+  const delta = ant ? Math.round(((n.receita - ant) / ant) * 100) : null;
+  const top = [...p.porOferta].filter((o) => !S.f.oferta || o.id === S.f.oferta).sort((a, b) => b.receita7 - a.receita7).slice(0, 3);
+  const medalha = ['1º', '2º', '3º'];
+  const pend = pendencias();
+  const hora = new Date().getHours();
+  const saud = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
+  const frase = !S.d.meta ? 'A Meta não está conectada, então gasto e ROAS ainda não aparecem.'
+    : ok(n.roas) ? `Nos últimos ${per}, cada R$ 1 em anúncio voltou <b class="${corR}">R$ ${fmtRoas(n.roas)}</b>${ok(n.lucro) ? ` e sobrou <b class="${n.lucro >= 0 ? 'verde' : 'verm'}">${fmtR(n.lucro)}</b> de lucro estimado` : ''}.`
+    : `Ainda não há gasto registrado nos últimos ${per}.`;
   $('#main').innerHTML = `
-  <div class="filtros">
-    <div class="seg" id="per">${[['hoje', 'Hoje'], ['7', '7 dias'], ['30', '30 dias']].map(([v, t]) => `<button data-v="${v}" class="${(S.f.periodo === v || (v === 'hoje' && S.f.periodo === 'hoje')) ? 'on' : ''}">${t}</button>`).join('')}</div>
+  <section class="hoje">
+    <div class="hoje-txt">
+      <div class="cap">${saud}, ${esc(S.user.nome.split(' ')[0])} · ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+      <p class="frase">${frase}</p>
+      <p class="frase2">${vs >= meta ? `Meta de vencedores batida: <b class="verde">${vs} de ${meta}</b> nesta semana.` : `<b class="${corV}">${vs} de ${meta}</b> vencedores novos nesta semana${vs < meta ? ` — faltam ${meta - vs}` : ''}.`}</p>
+    </div>
+    <div class="pend card">
+      <div class="cap">Precisa de você</div>
+      ${pend.length ? pend.map((x) => `<a class="pi ${x.cor}" href="${x.href}"><span class="pn">${x.n}</span><span>${x.txt}</span><span class="seta">→</span></a>`).join('') : `<div class="pvazio">Nada pendente ✓<small>O Diretor de Copy roda a cada hora; o próximo veredito sai às 06:10.</small></div>`}
+    </div>
+  </section>
+  <div class="filtros sticky">
+    <div class="seg" id="per">${[['hoje', 'Hoje'], ['7', '7 dias'], ['30', '30 dias']].map(([v, t]) => `<button data-v="${v}" class="${S.f.periodo === v ? 'on' : ''}">${t}</button>`).join('')}</div>
     <select id="f_of">${opts(S.d.ofertas.map((o) => [o.id, o.nome]), S.f.oferta, 'Todas as ofertas')}</select>
-    ${S.f.periodo === 'hoje' ? '<span class="fraco" style="font-size:12.5px">"Hoje" mostra os números de 7 dias; o dia a dia aparece ao abrir um criativo.</span>' : ''}
+    ${S.f.periodo === 'hoje' ? '<span class="fraco" style="font-size:12.5px">"Hoje" mostra 7 dias; o dia a dia de cada criativo aparece na ficha.</span>' : ''}
   </div>
   <div class="g4">
-    <div class="card big"><div class="cap">Vencedores novos na semana${info('Criativos que viraram vencedor nos últimos 7 dias (regra: ' + R.vencedorVendas + '+ vendas com ROAS ≥ ' + R.roasSegue + ')')}</div>
-      <div class="v ${corV}">${vs}</div><div class="sub">meta ≥ ${meta}</div><div class="barra"><i style="width:${Math.min(100, (vs / meta) * 100)}%;background:var(--${corV === 'verde' ? 'verde' : corV === 'amar' ? 'amar' : 'verm'})"></i></div></div>
     <div class="card big"><div class="cap">Receita rastreada${info('Lastlink, vendas aprovadas sem reembolso, ligadas a um criativo · ' + per)}</div>
-      <div class="v">${fmtR(n.receita)}</div><div class="sub">Lastlink · vendas ligadas a criativo</div></div>
-    <div class="card big"><div class="cap">Gasto em ads${info('Meta Ads, contas ativas · ' + per)}</div>
-      <div class="v">${S.d.meta ? fmtR(n.gasto) : '—'}</div><div class="sub">Meta Ads · contas ativas</div></div>
-    <div class="card big"><div class="cap">ROAS${info('Receita rastreada ÷ gasto · lucro ≈ receita × ' + LIQUIDO + ' − gasto')}</div>
+      <div class="v" data-conta="${n.receita}" data-fmt="r">${fmtR(n.receita)}</div>
+      <div class="sub">${delta !== null ? `<span class="delta ${delta >= 0 ? 'verde' : 'verm'}">${delta >= 0 ? '▲' : '▼'} ${Math.abs(delta)}%</span> vs semana anterior` : 'Lastlink · vendas ligadas a criativo'}</div></div>
+    <div class="card big"><div class="cap">Gasto em anúncios${info('Meta Ads, contas ativas · ' + per)}</div>
+      <div class="v" ${S.d.meta ? `data-conta="${n.gasto}" data-fmt="r"` : ''}>${S.d.meta ? fmtR(n.gasto) : '—'}</div><div class="sub">Meta Ads · contas ativas</div></div>
+    <div class="card big"><div class="cap">ROAS${info('Receita rastreada ÷ gasto. Lucro ≈ receita × ' + LIQUIDO + ' − gasto (taxa da Lastlink)')}</div>
       <div class="v ${corR}">${fmtRoas(n.roas)}</div><div class="sub">lucro ≈ <span class="${ok(n.lucro) ? (n.lucro >= 0 ? 'verde' : 'verm') : ''}">${fmtR(n.lucro)}</span></div></div>
+    <div class="card big"><div class="cap">Vencedores novos${info('Viraram vencedor nos últimos 7 dias (regra: ' + R.vencedorVendas + '+ vendas com ROAS ≥ ' + fmtRoas(R.roasSegue) + ')')}</div>
+      <div class="v ${corV}">${vs}<small> / ${meta}</small></div>
+      <div class="barra"><i style="width:${Math.min(100, (vs / meta) * 100)}%;background:var(--${corV})"></i></div></div>
   </div>
   <div class="card regua">
-    <div><div class="cap">No ar${info('Rodando (no ar, variar, vencedor, fadiga) com gasto nos últimos 7 dias')}</div><div class="v">${noAr(todos).length}</div></div>
-    <div><a href="#/aprovar"><div class="cap">Em revisão</div><div class="v">${todos.filter((c) => c.status === 'revisao').length}</div></a></div>
-    <div><div class="cap">Aprovados pra produzir</div><div class="v">${todos.filter((c) => c.status === 'aprovado').length}</div></div>
+    <div><div class="cap">No ar${info('Rodando com gasto nos últimos 7 dias')}</div><div class="v">${noAr(todos).length}</div></div>
+    <a href="#/aprovar"><div class="cap">Em revisão</div><div class="v">${todos.filter((c) => c.status === 'revisao').length}</div></a>
+    <a href="#/board"><div class="cap">Pra produzir</div><div class="v">${todos.filter((c) => c.status === 'aprovado').length}</div></a>
     <div><div class="cap">Mortos na semana</div><div class="v">${mortosSemana(todos).length}</div></div>
-    <div><div class="cap">Share da maior oferta${info('Lastlink, receita 7d da maior oferta ÷ receita 7d total')}</div><div class="v ${share && share.pct > 55 ? 'verm' : ''}">${share ? share.pct + '%' : '—'}</div><div class="fraco" style="font-size:12px">${share ? esc(oferta(share.oferta)?.nome || share.oferta) : ''}</div></div>
+    <div><div class="cap">Maior oferta${info('Fatia da receita de 7 dias que vem da maior oferta. Acima de 55% = operação dependente de uma oferta só.')}</div><div class="v ${share && share.pct > 55 ? 'verm' : ''}">${share ? share.pct + '%' : '—'}</div><div class="fraco" style="font-size:12px">${share ? esc(oferta(share.oferta)?.nome || share.oferta) : ''}</div></div>
   </div>
-  <div class="secao"><h2>Top 3 ofertas em destaque</h2><a href="#/ofertas" style="font-size:13px">Todas as ofertas →</a></div>
+  <div class="secao"><h2>${S.f.oferta ? 'A oferta' : 'Ofertas que mais vendem'}</h2><span class="fraco" style="font-size:12.5px">receita de 7 dias</span><span class="grow"></span><a href="#/ofertas" class="lk">Todas as ofertas →</a></div>
   <div class="top3">${top.map((o, i) => {
     const cs = S.d.criativos.filter((c) => c.ofertaId === o.id);
     const g = soma(cs, 'gasto', 'd7'), roas = g > 0 ? o.receita7 / g : null;
     const varr = o.receitaSemanaAnterior ? Math.round(((o.receita7 - o.receitaSemanaAnterior) / o.receitaSemanaAnterior) * 100) : null;
-    return `<div class="card"><h3>${medalha[i]} ${esc(o.nome)} ${chipEst(o.estado)}</h3>
+    return `<div class="card of3"><div class="of3-top"><span class="pos">${medalha[i]}</span><h3>${esc(o.nome)}</h3>${chipEst(o.estado)}</div>
+      <div class="of3-v num">${fmtR(o.receita7)}${varr !== null ? ` <span class="delta ${varr >= 0 ? 'verde' : 'verm'}">${varr >= 0 ? '▲' : '▼'} ${Math.abs(varr)}%</span>` : ''}</div>
       <div class="mini">
-        <div><div class="cap">Receita 7d</div><div class="v">${fmtR(o.receita7)} ${varr !== null ? `<small class="${varr >= 0 ? 'verde' : 'verm'}" style="font-size:12px">${varr >= 0 ? '▲' : '▼'}${Math.abs(varr)}%</small>` : ''}</div></div>
-        <div><div class="cap">Gasto 7d</div><div class="v">${fmtR(g)}</div></div>
+        <div><div class="cap">Gasto</div><div class="v">${fmtR(g)}</div></div>
         <div><div class="cap">ROAS</div><div class="v ${roasCls(roas)}">${fmtRoas(roas)}</div></div>
-        <div><div class="cap">Vencedores vivos</div><div class="v">${o.vencedores}</div></div>
+        <div><div class="cap">Vencedores</div><div class="v">${o.vencedores}</div></div>
       </div>
-      <div class="row"><a class="btn ghost sm" href="#/board?oferta=${enc(o.id)}">Board</a><a class="btn ghost sm" href="#/ofertas/${enc(o.id)}">Leva ${o.proximaLeva ? '· ' + fmtData(o.proximaLeva.data) : ''}</a></div></div>`;
+      <div class="row"><a class="btn ghost sm" href="#/board?oferta=${enc(o.id)}">Ver no board</a><a class="btn ghost sm" href="#/ofertas/${enc(o.id)}">${o.proximaLeva ? `Próxima leva · ${fmtData(o.proximaLeva.data).slice(0, 5)}` : 'Planejar leva'}</a></div></div>`;
   }).join('') || '<div class="card fraco">Nenhuma oferta com receita ainda.</div>'}</div>
   <div class="duo">
-    <div class="card"><header><h2>Evolução da operação</h2><span class="grow"></span><div class="legenda"><span><i style="background:var(--verde)"></i>Receita</span><span><i style="background:var(--fraco)"></i>Gasto</span><span><i style="background:#2EE59D66;height:8px"></i>Lucro</span></div></header>
-      <div id="evo"><div class="vazio" style="padding:60px 20px">30 dias, somando os criativos com gasto${S.f.oferta ? ' desta oferta' : ''}.<br><br><button class="btn ghost" id="verEvo">Ver evolução</button></div></div></div>
-    <div class="card"><header><h2>Últimos vereditos</h2></header><div class="feed" id="feed"><div class="fraco">carregando…</div></div></div>
+    <div class="card"><header><h2>Evolução</h2><span class="fraco" style="font-size:12.5px">30 dias</span><span class="grow"></span><div class="legenda"><span><i style="background:var(--verde)"></i>Receita</span><span><i style="background:var(--fraco)"></i>Gasto</span><span><i style="background:#2EE59D55;height:8px"></i>Lucro</span></div></header>
+      <div id="evo"><button class="evo-vazio" id="verEvo">${graficoFantasma()}<span class="btn ghost">Carregar evolução</span></button></div></div>
+    <div class="card"><header><h2>O que o motor decidiu</h2><span class="grow"></span><span class="fraco" style="font-size:12px">vereditos e hipóteses</span></header><div class="feed" id="feed">${'<div class="sk"></div>'.repeat(4)}</div></div>
   </div>`;
   $$('#per button').forEach((b) => b.onclick = () => { S.f.periodo = b.dataset.v; pageVisao(); });
   $('#f_of').onchange = (e) => { S.f.oferta = e.target.value; pageVisao(); };
   $('#verEvo').onclick = desenharEvolucao;
   if (S.evolucao[S.f.oferta || '*'] && Date.now() - S.evolucao[S.f.oferta || '*'].em < 600_000) desenharEvolucao();
+  contarNumeros();
   carregarFeed();
+}
+// O que pede ação do usuário agora, em ordem de urgência. Tudo derivado do bootstrap.
+function pendencias() {
+  const cs = S.d.criativos, p = S.d.painel, R = S.d.regras;
+  const n = (s) => cs.filter((c) => c.status === s).length;
+  const semLeva = p.porOferta.filter((o) => ['escalando', 'validacao', 'em_risco'].includes(o.estado) && !o.proximaLeva);
+  const l = [];
+  if (n('revisao')) l.push({ n: n('revisao'), txt: n('revisao') === 1 ? 'criativo esperando sua aprovação' : 'criativos esperando sua aprovação', href: '#/aprovar', cor: 'azul' });
+  if (n('meio')) l.push({ n: n('meio'), txt: 'no meio do caminho: pedem 1 variação', href: '#/aprovar', cor: 'amar' });
+  const risco = p.porOferta.filter((o) => o.estado === 'em_risco');
+  if (risco.length) l.push({ n: risco.length, txt: `${risco.length === 1 ? 'oferta' : 'ofertas'} em risco (sem vencedor há ${R.diasRisco}+ dias)`, href: '#/ofertas', cor: 'verm' });
+  if (n('aprovado')) l.push({ n: n('aprovado'), txt: 'aprovados esperando produção', href: '#/board', cor: '' });
+  if (n('fadiga')) l.push({ n: n('fadiga'), txt: 'vencedores cansando (fadiga)', href: '#/board', cor: 'amar' });
+  if (semLeva.length) l.push({ n: semLeva.length, txt: `${semLeva.length === 1 ? 'oferta ativa' : 'ofertas ativas'} sem próxima leva`, href: '#/ofertas', cor: '' });
+  return l;
+}
+// Números grandes sobem de 0 até o valor, só na primeira vez que a tela abre.
+function contarNumeros() {
+  if (S.contou) return; S.contou = true;
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  $$('[data-conta]').forEach((el) => {
+    const fim = Number(el.dataset.conta); if (!Number.isFinite(fim) || fim === 0) return;
+    const t0 = performance.now(), dur = 700;
+    const passo = (t) => { const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3); el.textContent = fmtR(fim * e); if (k < 1) requestAnimationFrame(passo); };
+    requestAnimationFrame(passo);
+  });
+}
+function graficoFantasma() {
+  const pts = Array.from({ length: 30 }, (_, i) => 120 - Math.sin(i / 3) * 30 - i * 1.5);
+  return `<svg class="chart" viewBox="0 0 760 240" preserveAspectRatio="none"><path d="${pts.map((y, i) => `${i ? 'L' : 'M'}${(i / 29) * 760},${y}`).join('')}" fill="none" stroke="#242A33" stroke-width="3"/><path d="${pts.map((y, i) => `${i ? 'L' : 'M'}${(i / 29) * 760},${y + 50}`).join('')}" fill="none" stroke="#1D2229" stroke-width="3"/></svg>`;
 }
 async function carregarFeed() {
   try {
     if (!S.feed || Date.now() - S.feed.em > 60_000) S.feed = { em: Date.now(), rows: await api('/api/cr/aprendizados') };
     const rows = S.feed.rows.filter((a) => ['veredito', 'analista'].includes(a.autor)).filter((a) => !S.f.oferta || a.oferta_id === S.f.oferta).slice(0, 12);
-    const ic = { veredito: '⚖️', hipotese: '💡', nota: '📝', dissecacao: '🔬' };
+    const ic = { veredito: '<span class="fi v">✓</span>', hipotese: '<span class="fi h">?</span>', nota: '<span class="fi">•</span>', dissecacao: '<span class="fi">≡</span>' };
     const el = $('#feed'); if (!el) return;
     el.innerHTML = rows.map((a) => `<div><span class="ic">${ic[a.tipo] || '•'}</span><span>${esc(String(a.texto).slice(0, 180))}${String(a.texto).length > 180 ? '…' : ''}
-      <small>${esc(a.oferta_id || '')}${a.criativo_id ? ` · <a href="#" data-ficha="${esc(a.criativo_id)}">${esc(a.criativo_id)}</a>` : ''} · ${fmtDH(a.criado_em)}</small></span></div>`).join('') || '<div class="fraco" style="grid-template-columns:1fr">Nenhum veredito ainda. O motor roda às 06:10.</div>';
+      <small>${esc(a.oferta_id || '')}${a.criativo_id ? ` · <a href="#" data-ficha="${esc(a.criativo_id)}">${esc(a.criativo_id)}</a>` : ''} · ${fmtDH(a.criado_em)}</small></span></div>`).join('') || '<div class="pvazio">Nenhum veredito ainda.<small>O motor decide às 06:10, 72 h depois de cada criativo entrar no ar.</small></div>';
   } catch (e) { const el = $('#feed'); if (el) el.innerHTML = `<div class="fraco">${esc(e.message)}</div>`; }
 }
 async function desenharEvolucao() {
