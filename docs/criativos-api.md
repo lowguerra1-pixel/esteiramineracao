@@ -56,7 +56,8 @@ Base: `https://esteiramineracao.netlify.app/api/cr`. Tudo em JSON. Erros vêm co
 | POST | `/normalizar` (gestor) | Normaliza IDs antigos e funde duplicatas |
 | POST | `/importar` (gestor) | `{ ofertas?, criativos?, vendas?, metricas? }` (lotes de até 1500) |
 | GET | `/log` | Últimos 100 eventos (webhook, sync, veredito, analista, importacao) |
-| POST | `/lastlink/<token>` | **Webhook da Lastlink** (sem login). URL completa em `/bootstrap.webhook` |
+| POST | `/lastlink/<token>` | **Webhook da Lastlink** (sem login, opcional: tempo real nos produtos onde estiver configurado). URL completa em `/bootstrap.webhook` |
+| POST | `/lastlink/sync {desde?, ate?}` (gestor) | **Vendas pela API da Lastlink** (`sales.list` do MCP): front, bumps, upsells, reembolsos e chargebacks, ligados ao criativo pelo `ad_id` do `utm_content`. Até 20 dias responde na hora; mais que isso vai para segundo plano (202). Precisa de `LASTLINK_CLIENT_ID/SECRET` na Netlify; `bootstrap.lastlinkConfigurada` diz se está. |
 
 ## Regras do veredito (editáveis em `/config.regras`)
 
@@ -71,7 +72,8 @@ Base: `https://esteiramineracao.netlify.app/api/cr`. Tudo em JSON. Erros vêm co
 
 | Quando | O quê |
 | --- | --- |
-| Toda venda | Webhook da Lastlink grava a venda e liga ao criativo pelo `utm_content` |
+| Toda hora (:40) | Sync da Lastlink pela API: vendas dos últimos 2 dias (todos os produtos) → `vendas`, ligadas ao criativo pelo `ad_id` do `utm_content` |
+| Toda venda (onde há webhook) | Webhook da Lastlink grava na hora; o sync horário confirma e completa (mesmo id, sem duplicar) |
 | 06:10 (Brasília), diário | Sync Meta (3 dias) → veredito → **Analista**: por oferta viva grava `veredito` + 3 `hipotese`, cria a próxima leva (`planejada` = amanhã) com os cards na `fila` já com `tipo` e `paiId` sugeridos, e disseca vencedores novos que tenham `copy` |
 | Mensal | Renovação do token da Meta |
 
