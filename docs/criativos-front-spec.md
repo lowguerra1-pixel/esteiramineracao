@@ -29,6 +29,7 @@ Uma chamada ao abrir e a cada 60 s: `GET /api/cr/bootstrap`. Tudo abaixo deriva 
 | Board | colunas | — | `#/board` |
 | Ofertas | etiqueta | nº de ofertas `em_risco` (amarelo) | `#/ofertas` |
 | Criativos | tabela | — | `#/criativos` |
+| Biblioteca | livro | — | `#/biblioteca` |
 | ⚙ Ajustes (rodapé) | engrenagem | ponto vermelho se `meta` for null ou `ultimoSync` > 36 h | `#/ajustes` |
 
 Topo do conteúdo, em todas as telas: título da tela à esquerda; à direita, chip "Ao vivo · sync 06:10 · veredito 06:10" com as horas reais de `ultimoSync.em` / `ultimoVeredito.em`, e o nome do usuário com "Sair".
@@ -60,6 +61,7 @@ A tela de decisão. Lista à esquerda (30%) com os cards em `revisao`, ordenados
 
 - Cabeçalho: ID (editável inline → `PATCH /criativos/:id {novoId}`), chips de oferta/tipo/formato/leva, **criativo-pai** com seus números (`total.roas`, `total.vendas`) e link para abrir.
 - **Nota do Revisor** em destaque (número grande + motivos + ajustes), tirada da última entrada de `historico` com `por = revisor`.
+- **Base na pesquisa** (`basePesquisa`, caixa cinza, 2–4 linhas) e chips das fichas lidas (`fichas[]`, clicar abre `GET /biblioteca/:id` num modal de leitura).
 - Blocos: Ângulo · Mecanismo · Hook (em fonte maior) · Body (estrutura) · Copy completa (texto do anúncio, HEADLINE, ROTEIRO/ARTE, POR QUE — é um único campo `copy`; mostrar como está, com quebras).
 - Campo "Arquivo (Drive)" (`arquivoUrl`) e campo de nota.
 - **Dois botões grandes fixos no rodapé**: `Aprovar` (verde, → `POST /criativos/:id/status {para:'aprovado'}`) e `Devolver` (vermelho, abre caixa de nota obrigatória → `{para:'briefing', nota}`). Atalhos: `A` aprova, `D` devolve, `↓/↑` navega. Depois da ação, avança para o próximo da lista.
@@ -80,7 +82,8 @@ Card (compacto, 2 linhas): ID em negrito; chips tipo (modelagem cinza, variaçã
 Lista: um cartão por oferta, ordenado por `receita7` desc, com: nome, sigla, chip de estado, mix (três barras finas modelagem/variação/zero), Receita 7d ▲/▼, Vencedores vivos, No ar, Na fila, "Último vencedor há N dias" (vermelho ≥ `regras.diasRisco`), Próxima leva (data + id) ou "não planejada". Botão "Abrir".
 
 Detalhe (`#/ofertas/:id`), em duas colunas:
-- Esquerda: formulário da oferta (`PATCH /ofertas/:id`): nome, família, estado (mudar estado ajusta o mix sozinho no backend), prefixos, produtos Lastlink, página de vendas, pasta no Drive, e um campo grande **"Pesquisa da oferta"** (= `notas`; rótulo explica: "avatar, promessa, mecanismo, objeções — é o que o Diretor de Copy lê").
+- Esquerda: formulário da oferta (`PATCH /ofertas/:id`): nome, família, estado (mudar estado ajusta o mix sozinho no backend), prefixos, produtos Lastlink, página de vendas, pasta no Drive, teto de custo por IC (`tetoIc`, USD), e **Notas do gestor** (`notas`, textarea).
+- Bloco **Pesquisa da oferta** (`GET /ofertas/:id/pesquisa`): se `temPesquisa`, mostra o resumo em 6 camadas (`resumo`, pré-formatado, dobrável) com botão "Reimportar do Drive" (`POST /ofertas/:id/pesquisa {}`); se não, estado vazio "Sem pesquisa — o Copy escreve só pelos vencedores" com dois botões: "Importar do Drive" (usa `sugeridos`; se falhar com erro de arquivo não público, mostrar a mensagem do backend) e "Colar pesquisa" (textarea → `POST {texto}`). Mostrar spinner: leva ~20 s.
 - Direita: **Levas** (tabela: id, status, planejada, no ar, hipótese, criativos, vencedores; botão "+ Leva" → `POST /levas`; clicar abre edição inline `PATCH /levas/:id`) e **Aprendizados** (`GET /aprendizados?oferta=ID`, mais recentes primeiro, filtro por tipo; caixa "Anotar" → `POST /aprendizados {ofertaId, tipo:'nota', texto}`).
 
 ## 7. Criativos (`#/criativos`)
@@ -93,7 +96,8 @@ A tabela atual, mantida: colunas ordenáveis (ID, oferta, status, tipo, formato,
 - Duas réguas de 6 métricas: (gasto total · vendas · receita · ROAS total · ROAS 7d · CPA) e (hook % · hold % · CTR · conversão · IC · reembolsos).
 - Sparkline diário (`GET /criativos/:id/serie`): barras de receita (verde) sobre gasto (cinza).
 - Botões de transição permitidos a partir do status atual (mesma tabela `PROXIMO` do front atual), "Dissecar" (`POST /criativos/:id/dissecar`, só se houver copy).
-- Formulário da ficha (`PATCH`): tipo, formato, leva, pai (autocomplete entre vencedores da oferta), ângulo, mecanismo, hook, body, arquivo, copy (textarea grande), aprendizado (1 linha), nota do revisor.
+- Formulário da ficha (`PATCH`): tipo, formato, leva, pai (autocomplete entre vencedores da oferta), ângulo, mecanismo, hook, body, arquivo, copy (textarea grande), aprendizado (1 linha), nota do revisor, base na pesquisa (`basePesquisa`).
+- Seção dobrável **Marcações do Editor** (`marcacoes`, `PATCH`): formato do hook (select: UGC · Avatar · Tela dividida · Animado · Chat · Caderno · Imagem animada · Vídeo realista · Câmera de segurança · Tablet · React · Estático · Podcast · Listicle · Outro), primeiro frame (texto), legenda (sim/não), duração (s), cortes por 10 s, produto aparece em (s), avatar (texto). São os campos da aba VISUAL do Controle de Levas.
 - Histórico (lista cronológica inversa) e aprendizados do criativo (`GET /aprendizados?criativo=ID`), incluindo a dissecação renderizada como ficha (JSON → blocos: hook literal, modelo de gancho, ângulos, avatar, consciência, emoções, esqueleto).
 
 ## 9. Novo criativo (modal)
@@ -103,6 +107,10 @@ Campos: oferta, leva (só da oferta, não encerradas), ID (ajuda: "nome que o an
 ## 10. Ajustes (`#/ajustes`, só admin)
 
 Quatro cartões, como hoje, mas limpos: **Meta** (status da conexão, "Conectar/trocar token" com instrução, lista de contas com toggles → `POST /config {contas}`, botões "Sincronizar 3 dias" e "Puxar histórico até data"), **Lastlink** (URL do webhook com botão copiar + instrução de 3 eventos; "Ver log" abre lista do `/log`), **Regras do veredito** (formulário → `POST /config {regras}`), **Agentes** (botões "Rodar Analista agora" `POST /analista`, "Rodar Copy agora" `POST /copy`, "Rodar veredito" `POST /veredito`, "Religar" `POST /religar`; mostra `cr_ultimo_*` quando vierem no bootstrap). Importação de CSV fica num link discreto "Importar semente".
+
+## 10b. Biblioteca (`#/biblioteca`, item do menu abaixo de Ofertas)
+
+Lista das fichas (`GET /biblioteca`) agrupada por categoria, com título, fonte e peso (chip "essencial"). Clicar abre leitura em modal (markdown renderizado de `GET /biblioteca/:id`). Painel lateral "Por situação" com as chaves de `situacoes` → fichas (é o INDICE). Gestor vê "Nova ficha" (formulário → `PUT /biblioteca/:id`) e "Reimportar do Drive" (chama `POST /biblioteca/importar` em lotes de 5 ids, com barra de progresso).
 
 ## 11. Estados vazios e erros
 
