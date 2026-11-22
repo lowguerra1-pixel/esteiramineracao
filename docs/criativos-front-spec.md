@@ -31,6 +31,7 @@ Uma chamada ao abrir e a cada 60 s: `GET /api/cr/bootstrap`. Tudo abaixo deriva 
 | Ofertas | etiqueta | nº de ofertas `em_risco` (amarelo) | `#/ofertas` |
 | Criativos | tabela | — | `#/criativos` |
 | Biblioteca | livro | — | `#/biblioteca` |
+| Agentes | pulso | ponto verde se algum agente `ativo` | `#/agentes` |
 | ⚙ Ajustes (rodapé) | engrenagem | ponto vermelho se `meta` for null ou `ultimoSync` > 36 h | `#/ajustes` |
 
 Topo do conteúdo, em todas as telas: título da tela à esquerda; à direita, chip "Ao vivo · sync 06:10 · veredito 06:10" com as horas reais de `ultimoSync.em` / `ultimoVeredito.em`, e o nome do usuário com "Sair".
@@ -130,6 +131,12 @@ A fila do Editor (`GET /producao`): cartões por card em `aprovado` (com ou sem 
 ## 10b. Biblioteca (`#/biblioteca`, item do menu abaixo de Ofertas)
 
 Lista das fichas (`GET /biblioteca`) agrupada por categoria, com título, fonte e peso (chip "essencial"). Clicar abre leitura em modal (markdown renderizado de `GET /biblioteca/:id`). Painel lateral "Por situação" com as chaves de `situacoes` → fichas (é o INDICE). Gestor vê "Nova ficha" (formulário → `PUT /biblioteca/:id`) e "Reimportar do Drive" (chama `POST /biblioteca/importar` em lotes de 5 ids, com barra de progresso).
+
+## 10c. Agentes ao vivo (`#/agentes`, e um resumo fixo no rodapé do menu)
+
+`GET /agentes` a cada 20 s. Uma linha por agente (Sync Meta · Vendas Lastlink · Veredito · Analista · Diretor de Copy + Revisor · Diretor de Criação · Editor): ponto verde pulsando quando `ativo`, "fazendo agora" (ids dos cards em `fazendo`, com há quantos minutos), tamanho da `fila`, última rodada (`ultima.em` + `ultima.resumo`) e `proxima`. Abaixo, o feed `log` (20 últimas linhas, novas entram por cima com fade). No rodapé do menu esquerdo, em todas as telas: "Copy escrevendo 3 · fila 98 · próximo às 13:25" — é o "estão trabalhando?" de relance.
+
+Em **Aprovar**, acima da lista: barra de lote — filtros por pai (select com os pais dos cards em revisão, mostrando nº de cards e ROAS do pai), variável e nota mínima; botão "Aprovar estes N" → `POST /criativos/aprovar-lote {paiId?, variavel?, minScore, ids?}`. Ao agrupar por pai, a lista mostra o pai como cabeçalho (ROAS 7d, vendas) e os filhos embaixo com a variável como chip — é como se aprova uma árvore inteira em um clique.
 
 ## 11. Estados vazios e erros
 

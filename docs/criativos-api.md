@@ -96,6 +96,9 @@ Mesma regra dos chats de oferta do Controle de Levas: **primeiro a pesquisa da o
 
 | Rota | O que faz |
 | --- | --- |
+| `GET /agentes` | agentes ao vivo: `{ agentes[{ id, nome, ativo, fazendo, fila, ultima, proxima }], porStatus, log[] }` — para o painel e o rodapé do menu (polling 20 s) |
+| `POST /criativos/aprovar-lote {paiId?, levaId?, ofertaId?, variavel?, ids?, minScore=6, nota?}` (gestor) | aprova de uma vez os cards em `revisao` que batem o filtro e dispara o Diretor de Criação neles |
+| `POST /criativos/:id/arvore` (gestor) | abre a árvore de multiplicação de um vencedor (retroativo) · `POST /criativos/limpar {ofertaId?, status?, criadoPor?}` apaga cards gerados sem gasto/venda |
 | `GET /levas/:id/porque` | a leva explicada: `{ leva, oferta, vencedores[], fadiga[], mudancasDoMotor[], veredito, hipoteses[], cards[{ id, tipo, status, score, variavel, hipotese, muda, hook, pai{ id, roas7, vendas7, temCopy } }] }` |
 | `GET /biblioteca` | lista as fichas (sem texto) + `situacoes` (o INDICE em dados: situação → fichas) |
 | `GET /biblioteca/:id` | a ficha com texto |
