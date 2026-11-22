@@ -109,10 +109,11 @@ const ICONES = {
   colunas: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="5" height="16" rx="1.2"/><rect x="10" y="4" width="5" height="11" rx="1.2"/><rect x="17" y="4" width="4" height="7" rx="1.2"/></svg>',
   etiqueta: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12V4h8l10 10-8 8L3 12Z"/><circle cx="7.5" cy="8.5" r="1.3"/></svg>',
   tabela: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 9.5h18M3 14.5h18M9 9.5V20"/></svg>',
+  pulso: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l2.5-6 4 12 2.5-6H21"/></svg>',
   engrenagem: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>',
 };
-const ROTAS = [['', 'Visão geral', 'grade'], ['aprovar', 'Aprovar', 'check'], ['board', 'Board', 'colunas'], ['ofertas', 'Ofertas', 'etiqueta'], ['criativos', 'Criativos', 'tabela']];
-const TITULOS = { '': 'Visão geral', aprovar: 'Aprovar', board: 'Board', ofertas: 'Ofertas', criativos: 'Criativos', ajustes: 'Ajustes' };
+const ROTAS = [['', 'Visão geral', 'grade'], ['aovivo', 'Ao vivo', 'pulso'], ['aprovar', 'Aprovar', 'check'], ['board', 'Board', 'colunas'], ['ofertas', 'Ofertas', 'etiqueta'], ['criativos', 'Criativos', 'tabela']];
+const TITULOS = { '': 'Visão geral', aovivo: 'Ao vivo', aprovar: 'Aprovar', board: 'Board', ofertas: 'Ofertas', criativos: 'Criativos', ajustes: 'Ajustes' };
 
 async function boot() {
   if (!S.token) return renderLogin();
@@ -134,7 +135,7 @@ function menu(r) {
   const nRev = S.d.criativos.filter((c) => c.status === 'revisao').length;
   const nRisco = S.d.ofertas.filter((o) => o.estado === 'em_risco').length;
   const alerta = !S.d.meta || !S.d.ultimoSync || horas(S.d.ultimoSync.em) > 36;
-  const badge = { aprovar: nRev ? `<span class="badge verm">${nRev}</span>` : '', ofertas: nRisco ? `<span class="badge amar">${nRisco}</span>` : '' };
+  const badge = { aovivo: (S.vivo?.colunas || []).some((c) => c.ativo) ? '<span class="dot ok" title="agentes trabalhando"></span>' : '', aprovar: nRev ? `<span class="badge verm">${nRev}</span>` : '', ofertas: nRisco ? `<span class="badge amar">${nRisco}</span>` : '' };
   $('#menu').innerHTML = `<div class="marca"><div>Criativos<small><a href="/" style="color:inherit">Kaian Digital ↗</a></small></div></div>
     ${ROTAS.map(([id, nome, ic]) => `<a href="#/${id}" class="${r === id ? 'on' : ''}">${ICONES[ic]}<span>${nome}</span>${badge[id] || ''}</a>`).join('')}
     <span class="grow"></span>
@@ -156,6 +157,7 @@ function route() {
   if (!S.user || !S.d) return;
   const { r, arg, q } = rota();
   menu(r === 'levas' ? 'ofertas' : r); $('#titulo').textContent = r === 'levas' ? 'Por que esta leva?' : arg && r === 'ofertas' ? (oferta(arg)?.nome || arg) : TITULOS[r] ?? 'Visão geral';
+  if (r === 'aovivo') return pageAoVivo();
   if (r === 'aprovar') return pageAprovar();
   if (r === 'board') { if (q.get('oferta')) S.f.ofertasBoard = [q.get('oferta')]; return pageBoard(); }
   if (r === 'ofertas') return arg ? pageOferta(arg) : pageOfertas();
@@ -1104,3 +1106,47 @@ function parseCsv(txt) {
 }
 
 boot();
+
+
+// ---------------------------------------------------------------- Ao vivo: a esteira andando (kanban que se move sozinho)
+// Lê /api/cr/aovivo a cada 8 s e anima o card de uma coluna para a outra (FLIP) quando o status muda.
+const VIVO_MS = 8000;
+async function pageAoVivo() {
+  clearInterval(pageAoVivo.t);
+  $('#main').innerHTML = `<div class="vivo-top"><span class="muted">A esteira em tempo real: cada coluna é uma etapa, o nome embaixo é quem faz. Clique num card para abrir a ficha.</span><span class="grow"></span><span class="muted" id="vv_hora"></span></div>
+    <div class="vivo-cols" id="vv_cols"></div>
+    <div class="card" style="margin-top:16px"><header><h2>Últimos acontecimentos</h2></header><div class="log vivo-log" id="vv_log"></div></div>`;
+  await tickAoVivo(true);
+  pageAoVivo.t = setInterval(() => { if (rota().r === 'aovivo') tickAoVivo(false); else clearInterval(pageAoVivo.t); }, VIVO_MS);
+}
+const VARIAVEL_NOME = { hook_visual: 'hook visual', hook_falado: 'copy nova', body: 'body novo', formato: 'formato', angulo: 'ângulo novo', avatar: 'avatar', mecanismo: 'mecanismo', oferta: 'oferta', execucao: 'execução' };
+async function tickAoVivo(primeira) {
+  let d; try { d = await api('/api/cr/aovivo'); } catch (e) { $('#vv_hora').textContent = 'sem conexão: ' + e.message; return; }
+  const antes = {}; $$('#vv_cols [data-vid]').forEach((el) => { antes[el.dataset.vid] = { col: el.closest('.vivo-col').dataset.col, rect: el.getBoundingClientRect() }; });
+  S.vivo = d; menu(rota().r);
+  const agora = Date.now();
+  const min = (iso) => Math.max(0, Math.round((agora - new Date(iso).getTime()) / 60000));
+  const tempo = (iso) => { const m = min(iso); return m < 60 ? `${m} min` : m < 1440 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} d`; };
+  const porCol = Object.fromEntries(d.colunas.map((c) => [c.id, d.cards.filter((x) => x.status === c.id)]));
+  $('#vv_cols').innerHTML = d.colunas.map((c) => {
+    const cards = porCol[c.id].slice(0, 40);
+    return `<div class="vivo-col" data-col="${c.id}"><div class="vivo-head"><span class="vdot ${c.ativo ? 'on' : ''}"></span><b>${esc(c.nome)}</b><span class="n">${porCol[c.id].length}</span><small>${esc(c.agente)}</small></div><div class="vivo-list">${cards.map((x) => `<div class="vivo-card ${x.status === 'briefing' ? 'escrevendo' : ''}" data-vid="${esc(x.id)}" data-ficha="${esc(x.id)}">
+      <div class="vc-id">${esc(x.id)}${x.score != null ? `<span class="vc-nota ${x.score >= 8 ? 'g' : x.score >= 6 ? 'y' : 'r'}">${x.score}</span>` : ''}</div>
+      <div class="vc-meta">${x.variavel ? `<span class="chip v-${esc(x.variavel)}">${esc(VARIAVEL_NOME[x.variavel] || x.variavel)}</span>` : ''}${x.paiId ? `<span class="muted">← ${esc(x.paiId)}</span>` : ''}</div>
+      ${x.hook ? `<div class="vc-hook">${esc(x.hook)}</div>` : x.hipotese ? `<div class="vc-hook muted">${esc(x.hipotese)}</div>` : ''}
+      <div class="vc-foot">${x.status === 'briefing' ? '<span class="typing"><i></i><i></i><i></i></span> escrevendo' : x.status === 'aprovado' ? (x.temProjeto ? 'projeto pronto · esperando o Editor' : '<span class="typing"><i></i><i></i><i></i></span> Criação montando o projeto') : esc(x.nota || '')} <span class="grow"></span>${tempo(x.em)}</div>
+    </div>`).join('') || '<div class="vivo-vazio">—</div>'}${porCol[c.id].length > 40 ? `<div class="vivo-vazio">+${porCol[c.id].length - 40}</div>` : ''}</div></div>`;
+  }).join('');
+  $('#vv_hora').textContent = 'atualizado ' + new Date().toLocaleTimeString('pt-BR') + ' · a cada 8 s';
+  $('#vv_log').innerHTML = (d.log || []).map((l) => `<div>${fmtDH(l.em)} · <b>${esc(l.tipo)}</b> · ${esc(l.resumo || '')}</div>`).join('');
+  if (primeira) return;
+  // FLIP: card que mudou de coluna voa da posição antiga para a nova; card novo entra deslizando.
+  $$('#vv_cols [data-vid]').forEach((el) => {
+    const a = antes[el.dataset.vid];
+    if (!a) { el.classList.add('entrou'); return; }
+    if (a.col === el.closest('.vivo-col').dataset.col) return;
+    const b = el.getBoundingClientRect(); const dx = a.rect.left - b.left, dy = a.rect.top - b.top;
+    el.style.transition = 'none'; el.style.transform = `translate(${dx}px,${dy}px)`; el.classList.add('voando');
+    requestAnimationFrame(() => requestAnimationFrame(() => { el.style.transition = 'transform .9s cubic-bezier(.2,.8,.2,1)'; el.style.transform = ''; setTimeout(() => el.classList.remove('voando'), 1000); }));
+  });
+}
