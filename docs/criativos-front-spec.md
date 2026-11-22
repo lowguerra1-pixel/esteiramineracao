@@ -26,6 +26,7 @@ Uma chamada ao abrir e a cada 60 s: `GET /api/cr/bootstrap`. Tudo abaixo deriva 
 | --- | --- | --- | --- |
 | Visão geral | grade | — | `#/` |
 | Aprovar | check | nº de cards em `revisao` (vermelho se > 0) | `#/aprovar` |
+| Produção | clapete | cards em `producao` há > 3 dias (amarelo) | `#/producao` |
 | Board | colunas | — | `#/board` |
 | Ofertas | etiqueta | nº de ofertas `em_risco` (amarelo) | `#/ofertas` |
 | Criativos | tabela | — | `#/criativos` |
@@ -97,6 +98,7 @@ A tabela atual, mantida: colunas ordenáveis (ID, oferta, status, tipo, formato,
 - Sparkline diário (`GET /criativos/:id/serie`): barras de receita (verde) sobre gasto (cinza).
 - Botões de transição permitidos a partir do status atual (mesma tabela `PROXIMO` do front atual), "Dissecar" (`POST /criativos/:id/dissecar`, só se houver copy).
 - Formulário da ficha (`PATCH`): tipo, formato, leva, pai (autocomplete entre vencedores da oferta), ângulo, mecanismo, hook, body, arquivo, copy (textarea grande), aprendizado (1 linha), nota do revisor, base na pesquisa (`basePesquisa`).
+- Seção **Projeto de edição** (só quando `projeto` existe; aparece a partir de `aprovado`): demanda (texto), lista de hooks (id, formato, conceito), roteiro em tabela (n, frase, segmento, take/página, título), takes novos (cada um com os dois prompts e botão copiar; se `magnificConfigurado`, botão "Gerar imagem" → `POST /takes/:id/gerar` e depois `GET` até vir `arquivo_url`, que exibe a miniatura) e takes reaproveitados. Botão "Refazer projeto" (gestor) → `POST /criativos/:id/criacao`. Quando `entrega` existe, bloco "Entregue em …" com os arquivos e hooks.
 - Seção dobrável **Marcações do Editor** (`marcacoes`, `PATCH`): formato do hook (select: UGC · Avatar · Tela dividida · Animado · Chat · Caderno · Imagem animada · Vídeo realista · Câmera de segurança · Tablet · React · Estático · Podcast · Listicle · Outro), primeiro frame (texto), legenda (sim/não), duração (s), cortes por 10 s, produto aparece em (s), avatar (texto). São os campos da aba VISUAL do Controle de Levas.
 - Histórico (lista cronológica inversa) e aprendizados do criativo (`GET /aprendizados?criativo=ID`), incluindo a dissecação renderizada como ficha (JSON → blocos: hook literal, modelo de gancho, ângulos, avatar, consciência, emoções, esqueleto).
 
@@ -107,6 +109,10 @@ Campos: oferta, leva (só da oferta, não encerradas), ID (ajuda: "nome que o an
 ## 10. Ajustes (`#/ajustes`, só admin)
 
 Quatro cartões, como hoje, mas limpos: **Meta** (status da conexão, "Conectar/trocar token" com instrução, lista de contas com toggles → `POST /config {contas}`, botões "Sincronizar 3 dias" e "Puxar histórico até data"), **Lastlink** (status "API conectada" se `lastlinkConfigurada`, senão instrução das 2 variáveis na Netlify; botões "Sincronizar 2 dias" e "Puxar histórico até data" → `POST /vendas/sync`; URL do webhook como opção avançada dobrável; "Ver log" abre lista do `/log`), **Regras do veredito** (formulário → `POST /config {regras}`), **Agentes** (botões "Rodar Analista agora" `POST /analista`, "Rodar Copy agora" `POST /copy`, "Rodar veredito" `POST /veredito`, "Religar" `POST /religar`; mostra `cr_ultimo_*` quando vierem no bootstrap). Importação de CSV fica num link discreto "Importar semente".
+
+## 10a. Produção (`#/producao`, item do menu abaixo de Aprovar)
+
+A fila do Editor (`GET /producao`): cartões por card em `aprovado` (com ou sem projeto — sem projeto mostra "Diretor de Criação montando…") e `producao`, com oferta, formato, nº de hooks e takes novos, há quantos dias está ali. Clicar abre a ficha na seção Projeto de edição. Badge no menu = cards em `producao` há mais de 3 dias.
 
 ## 10b. Biblioteca (`#/biblioteca`, item do menu abaixo de Ofertas)
 

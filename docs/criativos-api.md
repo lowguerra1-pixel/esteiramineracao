@@ -17,7 +17,8 @@ Base: `https://esteiramineracao.netlify.app/api/cr`. Tudo em JSON. Erros vêm co
 
 **Leva** `{ id, ofertaId, numero, planejada, noAr, hipotese, status, codigo }` — `id` = `CFAM-L8`; `codigo` = id da leva no Controle de Levas (`CFAM-VID-20261118`), opcional; `status`: `planejada | producao | no_ar | encerrada`.
 
-**Criativo (card)** `{ id, ofertaId, levaId, tipo, paiId, formato, angulo, mecanismo, hook, body, copy, arquivoUrl, status, statusEm, noArEm, score, aprendizado, basePesquisa, fichas[], marcacoes, historico[], criadoPor, total, d7, d30 }`
+**Criativo (card)** `{ id, ofertaId, levaId, tipo, paiId, formato, angulo, mecanismo, hook, body, copy, arquivoUrl, status, statusEm, noArEm, score, aprendizado, basePesquisa, fichas[], marcacoes, projeto, projetoEm, entrega, historico[], criadoPor, total, d7, d30 }`
+- `projeto`: saída do Diretor de Criação (ver seção abaixo). `entrega`: o que o Editor devolveu `{ em, por, pasta, arquivos[], hooks[], takesUsados[], rejeitados[], nota }`.
 - `basePesquisa`: "Base na pesquisa" escrita pelo Copy (público, dor/desejo, objeção, expressões do público usadas). `fichas[]`: ids das fichas do repertório que o Copy leu.
 - `marcacoes`: marcações visuais do Editor, livres, no padrão do Controle de Levas: `{ formato_hook, primeiro_frame, legenda, duracao_s, cortes_por_10s, produto_aparece_em_s, avatar }`. Grave via `PATCH /criativos/:id {marcacoes}`.
 - `id` **= nome do anúncio no Meta**. Cards da fila nascem com ID provisório (`CFAM-L8-M01`); renomeie para o nome final antes de subir, ou use o provisório como nome do anúncio.
@@ -72,6 +73,7 @@ Base: `https://esteiramineracao.netlify.app/api/cr`. Tudo em JSON. Erros vêm co
 
 | Quando | O quê |
 | --- | --- |
+| Toda hora (:25) | Diretor de Criação nos cards aprovados sem projeto |
 | Toda hora (:40) | Sync da Lastlink pela API: vendas dos últimos 2 dias (todos os produtos) → `vendas`, ligadas ao criativo pelo `ad_id` do `utm_content` |
 | Toda venda (onde há webhook) | Webhook da Lastlink grava na hora; o sync horário confirma e completa (mesmo id, sem duplicar) |
 | 06:10 (Brasília), diário | Sync Meta (3 dias) → veredito → **Analista**: por oferta viva grava `veredito` + 3 `hipotese`, cria a próxima leva (`planejada` = amanhã) com os cards na `fila` já com `tipo` e `paiId` sugeridos, e disseca vencedores novos que tenham `copy` |
@@ -104,6 +106,33 @@ Mesma regra dos chats de oferta do Controle de Levas: **primeiro a pesquisa da o
 Como o Copy escolhe as fichas (1 a 3, pelo tipo do card e pela hipótese da leva): `zero` → ângulo + mecanismo; `variacao` → hook, formato, body ou ângulo conforme a hipótese fala em gancho/formato/estrutura/ângulo; `modelagem` → body + planejar; formato `IMG/CAR` soma headline; `UGC` soma a ficha de pessoa falando; oferta em `validacao` soma a ficha de oferta nova. A lista completa está em `situacoes` no `GET /biblioteca`.
 
 Pré-requisito da importação da pesquisa pelo Drive: a pasta `KAIAN DIGITAL › Ofertas` compartilhada como "qualquer pessoa com o link" (leitor). Sem isso, use `texto`.
+
+## Diretor de Criação + banco de takes (automático)
+
+Quando um card vira `aprovado` (e tem copy), o Diretor de Criação monta em 1–2 min o **projeto de edição** que o Editor (skill `editar-criativo` + `editor.py`) executa. Também roda no cron horário para aprovados sem projeto.
+
+`projeto = { demanda, corte_hook_body, roteiro[], hooks[], takes_novos[], takes_reaproveitados[], imagem, porque, gerado_em }`
+- `demanda`: "Para o editor — leia primeiro" (tipo, variável testada, manter/evitar, nomes, entrega).
+- `corte_hook_body`: a frase literal da copy onde termina o hook.
+- `roteiro[]`: uma linha por frase da copy: `{ n, frase, seg, take, page, z, titulo, nota }`. `seg` é o tipo de segmento do motor (`A` avatar, `vid`, `kit`, `split`, `caderno`, `chat`, `story`, `counter`, `checklist`, `collage`, `email`, `calendario`, `cctv`, `dissolver`, `react`, `carta_vibra`, `leque`, `draw`, `imgpan`). Sem segundos: `editor.py palavras` mede.
+- `hooks[]`: `{ id, formato, conceito, takes[], titulo }` — famílias visuais diferentes.
+- `takes_novos[]`: `{ id NOVO-xx, arquivo, tipo, descricao, bom_para, prompt_imagem (PT, ChatGPT/Magnific), prompt_animacao (EN, Grok), usa_produto_real }`. Entram no banco de takes como `ferramenta: a gerar`.
+- `takes_reaproveitados[]`: ids do banco.
+- `imagem` (cards IMG): `{ prompt_arte, headline, estilo }`.
+
+**Take** `{ id (OFERTA/arquivo), oferta_id, arquivo, tipo imagem|video|arte|pagina, ferramenta, descricao, bom_para, usado_em[], prompt, prompt_animacao, arquivo_url, tarefa, rejeitado, motivo }`
+
+| Rota | O que faz |
+| --- | --- |
+| `GET /producao` | a fila do Editor: cards `aprovado`/`producao` com `projeto` e a oferta |
+| `POST /criativos/:id/criacao` (gestor) | roda o Diretor de Criação neste card (202, segundo plano) · `POST /criacao` roda em todos os aprovados sem projeto |
+| `POST /criativos/:id/producao` | Editor começou (status `producao`) |
+| `POST /criativos/:id/entrega {pasta, arquivos[], hooks[], takesUsados[], rejeitados[{take, id, motivo}], marcacoes, arquivoUrl, nota}` | Editor entregou: grava `entrega`, marca takes usados/rejeitados, atualiza `marcacoes`; o card fica em `producao` até o sync da Meta ver o anúncio no ar |
+| `GET /takes?oferta=SIGLA` · `POST /takes` · `PATCH /takes/:id` | banco de takes |
+| `POST /takes/importar {ofertaId, texto}` | importa a tabela de um `_TAKES.md` |
+| `POST /takes/:id/gerar` · `GET /takes/:id/gerar` (gestor) | gera a imagem do take no Magnific (API da Freepik, precisa de `MAGNIFIC_API_KEY`) e confere o resultado (`arquivo_url`); `bootstrap.magnificConfigurado` |
+
+Na oficina: `docs/editor/pedidos.py` (copiar para `CLAUDE-EDITOR/_SISTEMA/engine/`) faz `listar`, `baixar <CODIGO>` (cria `PROJETOS/<CODIGO>/` com `demanda.md`, `copy.txt`, `leva.json`, `planos/_roteiro.json`, `takes.md` e marca em produção), `entregar <CODIGO> <pasta>`, `takes <SIGLA>`, `take-ok`, `take-x`.
 
 ## Diretor de Copy + Revisor (automático)
 
