@@ -15,7 +15,7 @@ const FORMATOS = ['IMG', 'VID', 'UGC', 'CAR'];
 const LEVA_NOME = { planejada: 'Planejada', producao: 'Produção', no_ar: 'No ar', encerrada: 'Encerrada' };
 const RODANDO = ['no_ar', 'meio', 'vencedor', 'fadiga'];
 const PRODUCAO = ['fila', 'briefing', 'producao', 'revisao', 'aprovado'];
-const PROXIMO = { fila: ['briefing'], briefing: ['producao', 'revisao'], producao: ['revisao'], revisao: ['aprovado', 'briefing'], aprovado: ['no_ar', 'producao'], no_ar: ['vencedor', 'meio', 'morto'], meio: ['no_ar', 'morto', 'vencedor'], vencedor: ['fadiga', 'morto'], fadiga: ['vencedor', 'morto'], morto: ['fila'] };
+const PROXIMO = { fila: ['briefing', 'morto'], briefing: ['producao', 'revisao', 'morto'], producao: ['revisao'], revisao: ['aprovado', 'briefing', 'morto'], aprovado: ['no_ar', 'producao'], no_ar: ['vencedor', 'meio', 'morto'], meio: ['no_ar', 'morto', 'vencedor'], vencedor: ['fadiga', 'morto'], fadiga: ['vencedor', 'morto'], morto: ['fila'] };
 const PEDE_NOTA = ['briefing', 'morto'];
 
 // ---------------------------------------------------------------- utilidades
@@ -493,7 +493,8 @@ function detalheAprovar() {
       <label class="f"><span>Nota <em>(vai no histórico)</em></span><input type="text" id="ap_nota" placeholder="opcional ao aprovar, obrigatória ao devolver"></label></div>
     <div class="rodape">
       <button class="btn ok" id="ap_ok" ${admin() ? '' : 'disabled title="Só o gestor aprova"'}>Aprovar <kbd>A</kbd></button>
-      <button class="btn danger" id="ap_dev">Devolver <kbd>D</kbd></button><span class="grow"></span><span class="fraco" style="font-size:12px"><kbd>↑</kbd><kbd>↓</kbd> navegar</span>
+      <button class="btn danger" id="ap_dev">Devolver <kbd>D</kbd></button>
+      <button class="btn ghost" id="ap_mat" title="A ideia não serve (pai ou variável errados): some da fila, o Copy não reescreve">Matar <kbd>M</kbd></button><span class="grow"></span><span class="fraco" style="font-size:12px"><kbd>↑</kbd><kbd>↓</kbd> navegar</span>
     </div>`;
   el.scrollTop = 0;
   $$('[data-lerficha]', el).forEach((b) => b.onclick = () => lerFicha(b.dataset.lerficha));
@@ -505,6 +506,7 @@ function detalheAprovar() {
   };
   $('#ap_ok').onclick = () => decidir('aprovado');
   $('#ap_dev').onclick = () => decidir('briefing');
+  $('#ap_mat').onclick = () => decidir('morto');
 }
 // Leitura de uma ficha da biblioteca em modal (markdown simples).
 async function lerFicha(id) {
@@ -537,6 +539,7 @@ async function decidir(para) {
   if (para === 'aprovado' && !admin()) return toast('Só o gestor aprova.', true);
   let nota = $('#ap_nota')?.value.trim() || '';
   if (para === 'briefing' && !nota) { nota = await pedirNota(`Devolver ${c.id}`, 'O que precisa mudar? (o redator lê isto)'); if (nota === null) return; }
+  if (para === 'morto' && !nota) { nota = await pedirNota(`Matar ${c.id}`, 'Por que a ideia não serve? (o Analista lê isto; pode deixar curto)'); if (nota === null) return; }
   const arq = $('#ap_arq')?.value.trim() || '';
   const lista = emRevisao(); const i = lista.findIndex((x) => x.id === c.id);
   const prox = lista[i + 1]?.id || lista[i - 1]?.id || null;
@@ -553,6 +556,7 @@ document.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   if (k === 'a') { e.preventDefault(); decidir('aprovado'); }
   else if (k === 'd') { e.preventDefault(); decidir('briefing'); }
+  else if (k === 'm') { e.preventDefault(); decidir('morto'); }
   else if (k === 'arrowdown' || k === 'arrowup') {
     e.preventDefault(); const l = emRevisao(); const i = l.findIndex((x) => x.id === S.aprovSel);
     const n = l[Math.max(0, Math.min(l.length - 1, i + (k === 'arrowdown' ? 1 : -1)))]; if (n) { S.aprovSel = n.id; pageAprovar(); $('.item.on')?.scrollIntoView({ block: 'nearest' }); }
