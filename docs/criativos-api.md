@@ -15,9 +15,10 @@ Base: `https://esteiramineracao.netlify.app/api/cr`. Tudo em JSON. Erros vêm co
 - `estado`: `validacao | escalando | em_risco | pausada | encerrada`.
 - `mix`: `{ modelagem, variacao, zero }` em %. `prefixos`: outros prefixos de anúncio que pertencem à oferta. `produtos`: trechos do nome do produto na Lastlink.
 
-**Leva** `{ id, ofertaId, numero, planejada, noAr, hipotese, status, codigo }` — `id` = `CFAM-L8`; `codigo` = id da leva no Controle de Levas (`CFAM-VID-20261118`), opcional; `status`: `planejada | producao | no_ar | encerrada`.
+**Leva** `{ id, ofertaId, numero, planejada, noAr, hipotese, status, codigo, veredito, hipoteses[] }` — `hipoteses[]`: `{ titulo, porque, tipo, pai, variavel, ja_testado }` (3 por leva, variáveis diferentes entre si; cada card nasce ligado a uma). — `id` = `CFAM-L8`; `codigo` = id da leva no Controle de Levas (`CFAM-VID-20261118`), opcional; `status`: `planejada | producao | no_ar | encerrada`.
 
-**Criativo (card)** `{ id, ofertaId, levaId, tipo, paiId, formato, angulo, mecanismo, hook, body, copy, arquivoUrl, status, statusEm, noArEm, score, aprendizado, basePesquisa, fichas[], marcacoes, projeto, projetoEm, entrega, historico[], criadoPor, total, d7, d30 }`
+**Criativo (card)** `{ id, ofertaId, levaId, tipo, paiId, formato, angulo, mecanismo, hook, body, copy, arquivoUrl, status, statusEm, noArEm, score, aprendizado, basePesquisa, fichas[], marcacoes, projeto, projetoEm, entrega, variavel, hipotese, muda, historico[], criadoPor, total, d7, d30 }`
+- `variavel`: a única coisa que o card muda em relação ao pai (`hook_visual | hook_falado | body | formato | angulo | avatar | mecanismo | oferta | execucao`); `hipotese`: título da hipótese do Analista que ele testa; `muda`: 1–2 frases do Copy (o que fica igual, o que muda).
 - `projeto`: saída do Diretor de Criação (ver seção abaixo). `entrega`: o que o Editor devolveu `{ em, por, pasta, arquivos[], hooks[], takesUsados[], rejeitados[], nota }`.
 - `basePesquisa`: "Base na pesquisa" escrita pelo Copy (público, dor/desejo, objeção, expressões do público usadas). `fichas[]`: ids das fichas do repertório que o Copy leu.
 - `marcacoes`: marcações visuais do Editor, livres, no padrão do Controle de Levas: `{ formato_hook, primeiro_frame, legenda, duracao_s, cortes_por_10s, produto_aparece_em_s, avatar }`. Grave via `PATCH /criativos/:id {marcacoes}`.
@@ -95,6 +96,7 @@ Mesma regra dos chats de oferta do Controle de Levas: **primeiro a pesquisa da o
 
 | Rota | O que faz |
 | --- | --- |
+| `GET /levas/:id/porque` | a leva explicada: `{ leva, oferta, vencedores[], fadiga[], mudancasDoMotor[], veredito, hipoteses[], cards[{ id, tipo, status, score, variavel, hipotese, muda, hook, pai{ id, roas7, vendas7, temCopy } }] }` |
 | `GET /biblioteca` | lista as fichas (sem texto) + `situacoes` (o INDICE em dados: situação → fichas) |
 | `GET /biblioteca/:id` | a ficha com texto |
 | `POST /biblioteca/importar {ids?}` (gestor) | baixa do Drive (pasta `_SISTEMA\REPERTORIO`, pública) e grava; sem `ids` importa todas (chame em lotes de 5 — cada download leva uns 4 s) |

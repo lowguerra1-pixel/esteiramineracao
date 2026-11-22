@@ -60,6 +60,7 @@ Filtro no topo: período (`Hoje | 7 dias | 30 dias` — padrão 7 dias; muda `d7
 
 A tela de decisão. Lista à esquerda (30%) com os cards em `revisao`, ordenados por `score` desc, mostrando ID, oferta, tipo, formato e nota como badge (verde ≥ 8, amarelo 6–7, vermelho < 6). Ao clicar, o painel direito (70%) mostra:
 
+- **Linha de rastreio, sempre a primeira coisa do painel**: "modela **{pai}** (ROAS 7d {pai.roas7}, {pai.vendas7} vendas) · testa **{variavel}** · hipótese: {hipotese}" e logo abaixo `muda` (o que fica igual e o que muda). Link "ver a leva inteira" → `#/levas/:id`. Sem isso a nota do Revisor não faz sentido para quem aprova.
 - Cabeçalho: ID (editável inline → `PATCH /criativos/:id {novoId}`), chips de oferta/tipo/formato/leva, **criativo-pai** com seus números (`total.roas`, `total.vendas`) e link para abrir.
 - **Nota do Revisor** em destaque (número grande + motivos + ajustes), tirada da última entrada de `historico` com `por = revisor`.
 - **Base na pesquisa** (`basePesquisa`, caixa cinza, 2–4 linhas) e chips das fichas lidas (`fichas[]`, clicar abre `GET /biblioteca/:id` num modal de leitura).
@@ -69,6 +70,18 @@ A tela de decisão. Lista à esquerda (30%) com os cards em `revisao`, ordenados
 - Estado vazio: "Nada pra aprovar. O Diretor de Copy roda a cada hora; a próxima leva nasce às 06:10."
 
 Abaixo da lista, segunda seção dobrável **"Pede variação"**: cards em `meio` (o veredito pediu 1 variação). Botões: `Criar variação` (abre o formulário de novo card já com `tipo: variacao`, `paiId` = este, `levaId` = leva planejada aberta da oferta) e `Matar` (`{para:'morto'}`).
+
+## 4b. Leva — "Por que esta leva?" (`#/levas/:id`, aberta a partir de Aprovar, Ofertas e da ficha do card)
+
+A tela que explica a engenharia, de cima pra baixo, toda vinda de `GET /levas/:id/porque`:
+1. **O que deu bom** — `vencedores`: tabela id · ROAS 7d · vendas 7d · hook (1 linha); chip vermelho "sem copy" quando `temCopy` for falso (clicar abre a ficha no campo copy, com a dica "cole a transcrição: a dissecação roda sozinha").
+2. **O que está cansando** — `fadiga`: mesma tabela, ROAS 7d em vermelho.
+3. **O que o motor fez** — `mudancasDoMotor`: lista "data · criativo · no_ar → fadiga (ROAS 7d 1,8 vs 30d 3,1)".
+4. **O que o Analista concluiu** — `veredito` (texto corrido, 4–6 linhas).
+5. **O que vamos testar** — `hipoteses`: um cartão por hipótese com **variável** (chip colorido: hook_visual · hook_falado · body · formato · angulo · avatar · mecanismo · oferta · execucao), título, "por quê", pai (link) e "já testado" (cinza).
+6. **Os cards** — tabela: id · tipo · variável (chip) · pai (id + ROAS 7d) · "o que muda" (`muda`) · hook · status/nota. Agrupar por hipótese. Botões de Aprovar/Devolver inline (mesmos atalhos A/D).
+
+Uma leva se lê inteira nesta página sem abrir mais nada.
 
 ## 5. Board (`#/board`)
 
