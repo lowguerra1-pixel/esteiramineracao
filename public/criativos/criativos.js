@@ -576,7 +576,7 @@ async function pageLeva(id) {
       <td class="hk">${esc(c.hook || '—')}</td></tr>`).join('')}</tbody></table>` : '';
   const passo = (n, t, sub, corpo, vazio) => `<section class="passo"><div class="pn2">${n}</div><div class="pc"><h2>${t}${sub ? ` <span class="fraco">${sub}</span>` : ''}</h2>${corpo || `<div class="fraco pv">${vazio}</div>`}</div></section>`;
   const grupos = new Map();
-  for (const c of p.cards || []) { const k = c.hipotese || ''; if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(c); }
+  for (const c of [...(p.cards || [])].sort((a, b) => a.id.localeCompare(b.id, 'pt', { numeric: true }))) { const k = c.hipotese || ''; if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(c); }
   const ordemH = [...hips.map((h) => h.titulo), ...[...grupos.keys()].filter((k) => !hips.some((h) => h.titulo === k))];
   const nRev = (p.cards || []).filter((c) => c.status === 'revisao').length;
   $('#main').innerHTML = `
