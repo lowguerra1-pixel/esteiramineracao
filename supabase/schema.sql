@@ -417,3 +417,10 @@ create index if not exists esteira_cr_takes_oferta on esteira_cr_takes (oferta_i
 alter table esteira_cr_criativos add column if not exists projeto jsonb;          -- saída do Diretor de Criação (demanda, roteiro, hooks, takes)
 alter table esteira_cr_criativos add column if not exists projeto_em timestamptz;
 alter table esteira_cr_criativos add column if not exists entrega jsonb;          -- o que o Editor devolveu (arquivos, hooks entregues, takes usados)
+
+-- ---------------------------------------------------------------- Rastreabilidade da leva ("por que esta leva?")
+alter table esteira_cr_criativos add column if not exists variavel text;   -- o que este card testa em relação ao pai: hook_visual | hook_falado | body | formato | angulo | avatar | mecanismo | oferta | execucao
+alter table esteira_cr_criativos add column if not exists hipotese text;   -- título da hipótese do Analista que o card testa
+alter table esteira_cr_criativos add column if not exists muda text;       -- "o que muda" em 1–2 frases (escrito pelo Copy)
+alter table esteira_cr_levas add column if not exists veredito text;       -- veredito do Analista que originou a leva
+alter table esteira_cr_levas add column if not exists hipoteses jsonb default '[]';  -- [{titulo, porque, tipo, pai, variavel, ja_testado}]
