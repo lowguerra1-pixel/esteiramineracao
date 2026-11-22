@@ -1114,7 +1114,7 @@ const VIVO_MS = 8000;
 async function pageAoVivo() {
   clearInterval(pageAoVivo.t);
   $('#main').innerHTML = `<div class="vivo-top"><span class="muted">A esteira em tempo real: cada coluna é uma etapa, o nome embaixo é quem faz. Clique num card para abrir a ficha.</span><span class="grow"></span><span class="muted" id="vv_hora"></span></div>
-    <div class="vivo-cols" id="vv_cols"></div>
+    <div class="vivo-wrap"><div class="vivo-cols" id="vv_cols"></div><aside class="equipe" id="vv_equipe"></aside></div>
     <div class="card" style="margin-top:16px"><header><h2>Últimos acontecimentos</h2></header><div class="log vivo-log" id="vv_log"></div></div>`;
   await tickAoVivo(true);
   pageAoVivo.t = setInterval(() => { if (rota().r === 'aovivo') tickAoVivo(false); else clearInterval(pageAoVivo.t); }, VIVO_MS);
@@ -1138,6 +1138,7 @@ async function tickAoVivo(primeira) {
     </div>`).join('') || '<div class="vivo-vazio">—</div>'}${porCol[c.id].length > 40 ? `<div class="vivo-vazio">+${porCol[c.id].length - 40}</div>` : ''}</div></div>`;
   }).join('');
   $('#vv_hora').textContent = 'atualizado ' + new Date().toLocaleTimeString('pt-BR') + ' · a cada 8 s';
+  api('/api/cr/agentes').then(renderEquipe).catch(() => {});
   $('#vv_log').innerHTML = (d.log || []).map((l) => `<div>${fmtDH(l.em)} · <b>${esc(l.tipo)}</b> · ${esc(l.resumo || '')}</div>`).join('');
   if (primeira) return;
   // FLIP: card que mudou de coluna voa da posição antiga para a nova; card novo entra deslizando.
@@ -1149,4 +1150,26 @@ async function tickAoVivo(primeira) {
     el.style.transition = 'none'; el.style.transform = `translate(${dx}px,${dy}px)`; el.classList.add('voando');
     requestAnimationFrame(() => requestAnimationFrame(() => { el.style.transition = 'transform .9s cubic-bezier(.2,.8,.2,1)'; el.style.transform = ''; setTimeout(() => el.classList.remove('voando'), 1000); }));
   });
+}
+
+// Equipe: um avatar por agente, aceso quando está trabalhando.
+const AVATARES = {
+  sync: ['#5B8CFF', '<path d="M7 17h10a4 4 0 0 0 .5-8 6 6 0 0 0-11.3 1.5A3.3 3.3 0 0 0 7 17Z"/><path d="M12 11v6M9.5 13.5 12 11l2.5 2.5"/>'],
+  lastlink: ['#2EE59D', '<circle cx="12" cy="12" r="8"/><path d="M12 7v10M9.5 9.5h3.8a1.8 1.8 0 0 1 0 3.6H10.6a1.9 1.9 0 0 0 0 3.8h4"/>'],
+  veredito: ['#FFD23F', '<path d="M12 4v16M5 8l7-2 7 2M3 14l2-6 2 6a2 2 0 0 1-4 0ZM17 14l2-6 2 6a2 2 0 0 1-4 0Z"/><path d="M8 20h8"/>'],
+  analista: ['#5B8CFF', '<path d="M4 19h16M6 16V9M10 16V5M14 16v-6M18 16v-9"/>'],
+  copy: ['#C9B3FF', '<path d="M4 20l4-1 10-10-3-3L5 16l-1 4ZM13 7l3 3"/><path d="M14 20h6"/>'],
+  criacao: ['#FF9A5C', '<path d="M3 9h18v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9ZM3 9l2-4h14l2 4M8 5l2 4M13 5l2 4"/>'],
+  editor: ['#2EE59D', '<circle cx="7" cy="7" r="2.5"/><circle cx="7" cy="17" r="2.5"/><path d="M9 8.5 20 18M9 15.5 20 6"/>'],
+};
+function renderEquipe(d) {
+  const el = $('#vv_equipe'); if (!el) return;
+  const min = (iso) => iso ? Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000)) : null;
+  const hh = (iso) => { if (!iso) return '—'; if (/^\d\d:\d\d/.test(iso)) return iso; const x = new Date(iso); return isNaN(x) ? iso : x.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); };
+  el.innerHTML = `<div class="eq-titulo">Equipe <small>${d.agentes.filter((a) => a.ativo).length} trabalhando</small></div>` + d.agentes.map((a) => {
+    const [cor, svg] = AVATARES[a.id] || AVATARES.analista;
+    const faz = Array.isArray(a.fazendo) && a.fazendo.length ? a.fazendo.slice(0, 2).map((f) => typeof f === 'string' ? f : f.id).join(', ') + (a.fazendo.length > 2 ? ` +${a.fazendo.length - 2}` : '') : null;
+    const linha = a.ativo ? (faz ? `em ${faz}` : 'trabalhando…') : a.fila ? `parado · ${a.fila} na fila` : a.ultima?.em ? `última ${hh(a.ultima.em)}` : 'ocioso';
+    return `<div class="eq ${a.ativo ? 'on' : ''}"><div class="eq-av" style="--c:${cor}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${svg}</svg><i class="eq-st"></i></div><div class="eq-tx"><b>${esc(a.nome)}</b><span>${esc(linha)}</span><small>${a.ativo ? '<em>ao vivo</em>' : 'próxima ' + esc(hh(a.proxima))}</small></div></div>`;
+  }).join('');
 }
