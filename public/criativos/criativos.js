@@ -592,7 +592,7 @@ async function pageLeva(id) {
   </div>
   ${passo(1, 'O que deu bom', `${p.vencedores.length} vencedores da oferta`, tabela(p.vencedores), 'Nenhum vencedor vivo nesta oferta ainda.')}
   ${passo(2, 'O que está cansando', p.fadiga.length ? `${p.fadiga.length} em fadiga ou pedindo variação` : '', tabela(p.fadiga, true), 'Nada cansando com gasto nos últimos 7 dias.')}
-  ${passo(3, 'O que o motor fez', 'antes desta leva', (p.mudancasDoMotor || []).length ? `<div class="motor">${p.mudancasDoMotor.map((m) => `<div><span class="fraco">${fmtData(m.em).slice(0, 5)}</span>${m.criativo ? `<a href="#" data-ficha="${esc(m.criativo)}">${esc(m.criativo)}</a>` : ''}<span>${esc(m.texto)}</span></div>`).join('')}</div>` : '', 'O motor não mudou nenhum criativo desta oferta antes da leva.')}
+  ${passo(3, 'O que o motor fez', 'antes desta leva', (p.mudancasDoMotor || []).length ? `<div class="motor">${p.mudancasDoMotor.map((m) => `<div><span class="fraco">${fmtData(m.em).slice(0, 5)}</span>${m.criativo ? `<a href="#" data-ficha="${esc(m.criativo)}">${esc(m.criativo)}</a>` : ''}<span>${esc(traduzStatus(m.texto))}</span></div>`).join('')}</div>` : '', 'O motor não mudou nenhum criativo desta oferta antes da leva.')}
   ${passo(4, 'O que o Analista concluiu', '', p.veredito ? `<div class="veredito">${esc(p.veredito)}</div>` : '', 'Sem veredito registrado para esta leva. O Analista escreve às 06:10.')}
   ${passo(5, 'O que vamos testar', hips.length ? `${hips.length} hipóteses` : '', hips.length ? `<div class="hips">${hips.map((h, i) => { const pai = h.pai ? criativo(h.pai) : null; return `<div class="hipc">
       <div class="row">${h.variavel ? chipVar(h.variavel) : ''}${h.tipo ? chipTipo(h.tipo) : ''}<span class="grow"></span><span class="fraco" style="font-size:11.5px">${(grupos.get(h.titulo) || []).length} cards</span></div>
@@ -614,6 +614,8 @@ async function pageLeva(id) {
   $$('[data-lap]').forEach((b) => b.onclick = () => decidirLeva(b.dataset.lap, 'aprovado'));
   $$('[data-ldv]').forEach((b) => b.onclick = () => decidirLeva(b.dataset.ldv, 'briefing'));
 }
+// "no_ar → morto" vira "No ar → Morto" (sem códigos internos na tela)
+const traduzStatus = (t) => String(t || '').replace(/\b(fila|briefing|producao|revisao|aprovado|no_ar|meio|vencedor|fadiga|morto)\b/g, (k) => STATUS_NOME[k] || k);
 async function decidirLeva(id, para) {
   if (para === 'aprovado' && !admin()) return toast('Só o gestor aprova.', true);
   let nota = '';
