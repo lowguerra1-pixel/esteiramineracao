@@ -155,15 +155,16 @@ function rota() {
 function route() {
   if (!S.user || !S.d) return;
   const { r, arg, q } = rota();
-  menu(r); $('#titulo').textContent = arg && r === 'ofertas' ? (oferta(arg)?.nome || arg) : TITULOS[r] ?? 'Visão geral';
+  menu(r === 'levas' ? 'ofertas' : r); $('#titulo').textContent = r === 'levas' ? 'Por que esta leva?' : arg && r === 'ofertas' ? (oferta(arg)?.nome || arg) : TITULOS[r] ?? 'Visão geral';
   if (r === 'aprovar') return pageAprovar();
   if (r === 'board') { if (q.get('oferta')) S.f.ofertasBoard = [q.get('oferta')]; return pageBoard(); }
   if (r === 'ofertas') return arg ? pageOferta(arg) : pageOfertas();
+  if (r === 'levas' && arg) return pageLeva(arg);
   if (r === 'criativos') return pageCriativos();
   if (r === 'ajustes') return pageAjustes();
   return pageVisao();
 }
-window.addEventListener('hashchange', () => { window.scrollTo({ top: 0 }); route(); });
+window.addEventListener('hashchange', () => { fecharGaveta(); fecharModal(); window.scrollTo({ top: 0 }); route(); });
 
 // A cada 60 s: recarrega e redesenha, se ninguém estiver digitando nem com ficha/modal aberto.
 async function atualizar() {
@@ -556,6 +557,82 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// ---------------------------------------------------------------- 4b. Leva — "Por que esta leva?"
+async function pageLeva(id) {
+  $('#main').innerHTML = `<div class="sk" style="height:90px"></div>${'<div class="sk" style="height:140px"></div>'.repeat(3)}`;
+  let p;
+  try { p = await api(`/api/cr/levas/${enc(id)}/porque`); } catch (e) { $('#main').innerHTML = `<div class="vazio"><b>Não consegui abrir a leva ${esc(id)}.</b>${esc(e.message)}</div>`; return; }
+  if (rota().r !== 'levas') return;
+  S.levaAtual = p;
+  const L = p.leva, O = p.oferta;
+  // hipóteses antigas vêm só com texto: "… [modelagem · pai: X]"
+  const hips = (p.hipoteses || []).map((h) => {
+    const m = String(h.porque || '').match(/\[([a-z]+)(?:\s*·\s*pai:\s*([^\]]+))?\]\s*$/i);
+    return { ...h, tipo: h.tipo || m?.[1] || null, pai: h.pai || m?.[2]?.trim() || null, porque: m ? h.porque.replace(m[0], '').trim() : h.porque };
+  });
+  const tabela = (rows, cansando) => rows.length ? `<table class="tb tl"><thead><tr><th>Criativo</th><th class="n">ROAS 7d</th><th class="n">Vendas 7d</th><th class="n">ROAS total</th><th>Hook</th></tr></thead><tbody>${rows.map((c) => `<tr data-ficha="${esc(c.id)}">
+      <td><b>${esc(c.id)}</b>${c.temCopy ? '' : ` <button class="chip morto semcopy" data-semcopy="${esc(c.id)}" title="Cole a transcrição na ficha: a dissecação roda sozinha">sem copy</button>`}</td>
+      <td class="n"><b class="${cansando ? 'verm' : roasCls(c.roas7)}">${fmtRoas(c.roas7)}</b></td><td class="n">${fmtI(c.vendas7)}</td><td class="n">${fmtRoas(c.roas)}</td>
+      <td class="hk">${esc(c.hook || '—')}</td></tr>`).join('')}</tbody></table>` : '';
+  const passo = (n, t, sub, corpo, vazio) => `<section class="passo"><div class="pn2">${n}</div><div class="pc"><h2>${t}${sub ? ` <span class="fraco">${sub}</span>` : ''}</h2>${corpo || `<div class="fraco pv">${vazio}</div>`}</div></section>`;
+  const grupos = new Map();
+  for (const c of p.cards || []) { const k = c.hipotese || ''; if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(c); }
+  const ordemH = [...hips.map((h) => h.titulo), ...[...grupos.keys()].filter((k) => !hips.some((h) => h.titulo === k))];
+  const nRev = (p.cards || []).filter((c) => c.status === 'revisao').length;
+  $('#main').innerHTML = `
+  <div class="leva-h card">
+    <div><div class="cap"><a href="#/ofertas/${enc(O.id)}">${esc(O.nome)}</a> · leva ${esc(L.numero ?? '')}</div>
+      <h2 class="lh">${esc(L.id)} ${chipEst(O.estado)} <span class="chip">${esc(LEVA_NOME[L.status] || L.status)}</span></h2>
+      ${L.hipotese ? `<div class="fraco" style="margin-top:6px">${esc(L.hipotese)}</div>` : ''}</div>
+    <div class="leva-n">
+      <div><b>${(p.cards || []).length}</b><span>cards</span></div>
+      <div><b class="${nRev ? 'azul' : ''}">${nRev}</b><span>pra aprovar</span></div>
+      <div><b>${fmtData(L.planejada)}</b><span>planejada</span></div>
+    </div>
+  </div>
+  ${passo(1, 'O que deu bom', `${p.vencedores.length} vencedores da oferta`, tabela(p.vencedores), 'Nenhum vencedor vivo nesta oferta ainda.')}
+  ${passo(2, 'O que está cansando', p.fadiga.length ? `${p.fadiga.length} em fadiga ou pedindo variação` : '', tabela(p.fadiga, true), 'Nada cansando com gasto nos últimos 7 dias.')}
+  ${passo(3, 'O que o motor fez', 'antes desta leva', (p.mudancasDoMotor || []).length ? `<div class="motor">${p.mudancasDoMotor.map((m) => `<div><span class="fraco">${fmtData(m.em).slice(0, 5)}</span>${m.criativo ? `<a href="#" data-ficha="${esc(m.criativo)}">${esc(m.criativo)}</a>` : ''}<span>${esc(m.texto)}</span></div>`).join('')}</div>` : '', 'O motor não mudou nenhum criativo desta oferta antes da leva.')}
+  ${passo(4, 'O que o Analista concluiu', '', p.veredito ? `<div class="veredito">${esc(p.veredito)}</div>` : '', 'Sem veredito registrado para esta leva. O Analista escreve às 06:10.')}
+  ${passo(5, 'O que vamos testar', hips.length ? `${hips.length} hipóteses` : '', hips.length ? `<div class="hips">${hips.map((h, i) => { const pai = h.pai ? criativo(h.pai) : null; return `<div class="hipc">
+      <div class="row">${h.variavel ? chipVar(h.variavel) : ''}${h.tipo ? chipTipo(h.tipo) : ''}<span class="grow"></span><span class="fraco" style="font-size:11.5px">${(grupos.get(h.titulo) || []).length} cards</span></div>
+      <h3>${esc(h.titulo)}</h3><p>${esc(h.porque || '')}</p>
+      ${h.pai ? `<div class="hpai">pai <a href="#" data-ficha="${esc(h.pai)}">${esc(h.pai)}</a>${pai ? ` · ROAS 7d <b class="${roasCls(pai.d7.roas)}">${fmtRoas(pai.d7.roas)}</b>` : ''}</div>` : ''}
+      ${h.ja_testado ? `<div class="jat">já testado: ${esc(h.ja_testado)}</div>` : ''}</div>`; }).join('')}</div>` : '', 'O Analista não deixou hipóteses para esta leva.')}
+  ${passo(6, 'Os cards', (p.cards || []).length ? `${(p.cards || []).length} · <kbd>↑</kbd><kbd>↓</kbd> escolhe · <kbd>A</kbd> aprova · <kbd>D</kbd> devolve` : '', (p.cards || []).length ? ordemH.filter((k) => grupos.has(k)).map((k) => `<div class="lgrp"><div class="lgrp-t">${k ? esc(k) : 'Sem hipótese'}</div>
+      <table class="tb tl cards"><thead><tr><th>Card</th><th>Tipo</th><th>Testa</th><th>Pai</th><th>O que muda</th><th>Hook</th><th>Status</th><th></th></tr></thead><tbody>
+      ${grupos.get(k).map((c) => `<tr data-lc="${esc(c.id)}" class="${c.id === S.levaSel ? 'sel' : ''}">
+        <td><a href="#" data-ficha="${esc(c.id)}"><b>${esc(c.id)}</b></a></td><td>${chipTipo(c.tipo)}</td><td>${chipVar(c.variavel)}</td>
+        <td>${c.pai ? `<a href="#" data-ficha="${esc(c.pai.id)}">${esc(c.pai.id)}</a><br><small class="${roasCls(c.pai.roas7)}">ROAS 7d ${fmtRoas(c.pai.roas7)}</small>` : '<span class="fraco">—</span>'}</td>
+        <td class="muda">${esc(c.muda || '—')}</td><td class="hk">${esc(c.hook || '—')}</td>
+        <td>${chipSt(c.status)}${ok(c.score) ? ` <span class="nota ${notaCls(c.score)}">${fmtN(c.score, c.score % 1 ? 1 : 0)}</span>` : ''}</td>
+        <td class="acs">${c.status === 'revisao' ? `<button class="btn ok sm" data-lap="${esc(c.id)}" ${admin() ? '' : 'disabled'}>Aprovar</button><button class="btn ghost sm" data-ldv="${esc(c.id)}">Devolver</button>` : ''}</td></tr>`).join('')}
+      </tbody></table></div>`).join('') : '', 'Esta leva ainda não tem cards. O Copy escreve a cada hora a partir da fila.')}`;
+  if (!S.levaSel || !(p.cards || []).some((c) => c.id === S.levaSel)) S.levaSel = (p.cards || []).find((c) => c.status === 'revisao')?.id || null;
+  $$('[data-semcopy]').forEach((b) => b.onclick = (e) => { e.preventDefault(); e.stopPropagation(); abrirFicha(b.dataset.semcopy).then(() => { const t = $('#c_copy'); if (t) { t.scrollIntoView({ block: 'center' }); t.focus(); } toast('Cole a transcrição no campo Copy e salve: a dissecação roda sozinha.'); }); });
+  $$('[data-lc]').forEach((tr) => tr.onclick = (e) => { if (e.target.closest('a,button')) return; S.levaSel = tr.dataset.lc; $$('[data-lc]').forEach((x) => x.classList.toggle('sel', x === tr)); });
+  $$('[data-lap]').forEach((b) => b.onclick = () => decidirLeva(b.dataset.lap, 'aprovado'));
+  $$('[data-ldv]').forEach((b) => b.onclick = () => decidirLeva(b.dataset.ldv, 'briefing'));
+}
+async function decidirLeva(id, para) {
+  if (para === 'aprovado' && !admin()) return toast('Só o gestor aprova.', true);
+  let nota = '';
+  if (para === 'briefing') { nota = await pedirNota(`Devolver ${id}`, 'O que precisa mudar? (o redator lê isto)'); if (nota === null) return; }
+  const cards = S.levaAtual?.cards || []; const fila = cards.filter((c) => c.status === 'revisao'); const i = fila.findIndex((c) => c.id === id);
+  const r = await acao(() => api(`/api/cr/criativos/${enc(id)}/status`, { method: 'POST', body: { para, nota } }), para === 'aprovado' ? `${id} aprovado ✓` : `${id} devolvido`);
+  if (r !== undefined) { S.levaSel = fila[i + 1]?.id || fila[i - 1]?.id || null; await recarregar(); route(); }
+}
+document.addEventListener('keydown', (e) => {
+  if (rota().r !== 'levas' || !S.levaAtual || $('.modal') || $('.gaveta') || $('.pal')) return;
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName) || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(), rows = $$('[data-lc]').map((x) => x.dataset.lc);
+  if ((k === 'a' || k === 'd') && S.levaSel) { const c = S.levaAtual.cards.find((x) => x.id === S.levaSel); if (c?.status === 'revisao') { e.preventDefault(); decidirLeva(S.levaSel, k === 'a' ? 'aprovado' : 'briefing'); } }
+  else if ((k === 'arrowdown' || k === 'arrowup') && rows.length) {
+    e.preventDefault(); const i = rows.indexOf(S.levaSel); S.levaSel = rows[Math.max(0, Math.min(rows.length - 1, i + (k === 'arrowdown' ? 1 : -1)))];
+    $$('[data-lc]').forEach((x) => x.classList.toggle('sel', x.dataset.lc === S.levaSel)); $('[data-lc].sel')?.scrollIntoView({ block: 'nearest' });
+  }
+});
+
 // ---------------------------------------------------------------- 5. Board
 function pageBoard() {
   const f = S.f;
@@ -663,8 +740,8 @@ function pageOferta(id) {
     </div></div>
     <div style="display:grid;gap:14px;min-width:0">
       <div class="card"><header><h2>Levas</h2><span class="grow"></span><button class="btn sm" id="l_novo">+ Leva</button></header>
-        <div style="overflow:auto"><table class="tb"><thead><tr><th>Leva</th><th>Status</th><th>Planejada</th><th>No ar</th><th>Hipótese</th><th class="n">Criat.</th><th class="n">Venc.</th></tr></thead><tbody>
-        ${levas.map((l) => { const cs = S.d.criativos.filter((c) => c.levaId === l.id); return `<tr data-leva="${esc(l.id)}"><td><b>${esc(l.id)}</b></td><td>${LEVA_NOME[l.status] || esc(l.status)}</td><td>${fmtData(l.planejada)}</td><td>${fmtData(l.noAr)}</td><td class="hip">${esc(l.hipotese || '')}</td><td class="n">${cs.length}</td><td class="n">${cs.filter((c) => c.status === 'vencedor').length}</td></tr>`; }).join('') || '<tr><td colspan="7" class="fraco">Nenhuma leva ainda.</td></tr>'}
+        <div style="overflow:auto"><table class="tb"><thead><tr><th>Leva</th><th>Status</th><th>Planejada</th><th>No ar</th><th>Hipótese</th><th class="n">Criat.</th><th class="n">Venc.</th><th></th></tr></thead><tbody>
+        ${levas.map((l) => { const cs = S.d.criativos.filter((c) => c.levaId === l.id); return `<tr data-leva="${esc(l.id)}"><td><b>${esc(l.id)}</b></td><td>${LEVA_NOME[l.status] || esc(l.status)}</td><td>${fmtData(l.planejada)}</td><td>${fmtData(l.noAr)}</td><td class="hip">${esc(l.hipotese || '')}</td><td class="n">${cs.length}</td><td class="n">${cs.filter((c) => c.status === 'vencedor').length}</td><td><button class="link" data-edleva title="Editar datas, status e hipótese">editar</button></td></tr>`; }).join('') || '<tr><td colspan="8" class="fraco">Nenhuma leva ainda.</td></tr>'}
         </tbody></table></div></div>
       <div class="card"><header><h2>Aprendizados</h2><span class="grow"></span><select id="ap_tipo">${opts([['veredito', 'Vereditos'], ['hipotese', 'Hipóteses'], ['dissecacao', 'Dissecações'], ['nota', 'Notas']], '', 'Todos')}</select></header>
         <div class="row" style="margin-bottom:12px"><input id="ap_txt" placeholder="Anotar algo que a oferta ensinou…" style="flex:1"><button class="btn sm" id="ap_add">Anotar</button></div>
@@ -677,7 +754,7 @@ function pageOferta(id) {
     if (r !== undefined) { await recarregar(); route(); }
   };
   $('#l_novo').onclick = () => formLeva(id);
-  $$('[data-leva]').forEach((tr) => tr.onclick = () => formLeva(id, tr.dataset.leva));
+  $$('[data-leva]').forEach((tr) => tr.onclick = (e) => { if (e.target.closest('[data-edleva]')) return formLeva(id, tr.dataset.leva); location.hash = '#/levas/' + enc(tr.dataset.leva); });
   let apr = [];
   const desenhar = () => { const t = $('#ap_tipo').value; $('#ap_lista').innerHTML = listaAprendizados(apr.filter((a) => !t || a.tipo === t)) || '<div class="fraco">Nada ainda.</div>'; };
   $('#ap_tipo').onchange = desenhar;
@@ -796,7 +873,7 @@ async function abrirFicha(id) {
   const vencedores = S.d.criativos.filter((x) => x.ofertaId === c.ofertaId && x.status === 'vencedor' && x.id !== c.id);
   g.innerHTML = `<button class="btn ghost sm fechar" id="g_x">Fechar <kbd>Esc</kbd></button>
     <h2>${esc(c.id)}</h2>
-    <div class="meta">${chipSt(c.status)}<span class="chip">${esc(oferta(c.ofertaId)?.nome || c.ofertaId)}</span>${c.levaId ? `<span class="chip">${esc(c.levaId)}</span>` : ''}${chipTipo(c.tipo)}${c.formato ? `<span class="chip f">${esc(c.formato)}</span>` : ''}
+    <div class="meta">${chipSt(c.status)}<span class="chip">${esc(oferta(c.ofertaId)?.nome || c.ofertaId)}</span>${c.levaId ? `<a class="chip" href="#/levas/${enc(c.levaId)}" title="Por que esta leva?">${esc(c.levaId)} →</a>` : ''}${chipTipo(c.tipo)}${c.formato ? `<span class="chip f">${esc(c.formato)}</span>` : ''}
       ${c.paiId ? `<span>pai <a href="#" data-ficha="${esc(c.paiId)}">${esc(c.paiId)}</a></span>` : ''}${noArHa(c) !== null ? `<span>no ar há ${noArHa(c)} dias</span>` : ''}</div>
     <div class="reg6">${m(fmtR(T.gasto), 'Gasto total')}${m(fmtI(T.vendas), 'Vendas')}${m(fmtR(T.receita), 'Receita')}${m(`<span class="${roasCls(T.roas)}">${fmtRoas(T.roas)}</span>`, 'ROAS total')}${m(`<span class="${roasCls(D.roas)}">${fmtRoas(D.roas)}</span>`, 'ROAS 7d')}${m(fmtR(T.cpa), 'CPA')}</div>
     <div class="reg6">${m(fmtN(T.hookRate), 'Hook %')}${m(fmtN(T.holdRate), 'Hold %')}${m(fmtN(T.ctr), 'CTR %')}${m(fmtN(T.conversao), 'Conversão %')}${m(fmtI(T.ic), 'IC')}${m(fmtI(T.reembolsos), 'Reembolsos')}</div>
