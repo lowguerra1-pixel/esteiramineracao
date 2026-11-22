@@ -8,7 +8,15 @@ export default async (req) => {
   if (req.headers.get('x-cr-chave') !== chave) return new Response('Chave inválida.', { status: 403 });
   const ctx = contextoInterno();
   const b = await req.json().catch(() => ({}));
-  try { console.log('criacao', await rodarCriacao(ctx, { ids: b.ids, max: b.max || 5 })); }
+  try {
+    const out = await rodarCriacao(ctx, { ids: b.ids, max: b.max || 5 });
+    console.log('criacao', out);
+    // Sobrou aprovado sem projeto? Próxima rodada já.
+    if (!b.ids?.length && out.projetos > 0) {
+      const resto = await ctx.sb('esteira_cr_criativos?status=eq.aprovado&projeto=is.null&copy=not.is.null&select=id&limit=1');
+      if (resto.length) { const site = process.env.URL || 'https://esteiramineracao.netlify.app'; await fetch(`${site}/cr-criacao-bg`, { method: 'POST', headers: { 'x-cr-chave': chave, 'content-type': 'application/json' }, body: '{}' }).catch(() => {}); }
+    }
+  }
   catch (e) { console.error(e); await ctx.sb('esteira_cr_log', { method: 'POST', body: { tipo: 'criacao', resumo: `erro: ${e.message}` } }).catch(() => {}); }
   return new Response('ok');
 };
