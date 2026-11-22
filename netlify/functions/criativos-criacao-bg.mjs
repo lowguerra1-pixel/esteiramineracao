@@ -12,7 +12,7 @@ export default async (req) => {
     const out = await rodarCriacao(ctx, { ids: b.ids, max: b.max || 5 });
     console.log('criacao', out);
     // Sobrou aprovado sem projeto? Próxima rodada já.
-    if (!b.ids?.length && out.projetos > 0) {
+    if (!b.ids?.length && out.projetos > 0 && !out.motivo) {
       const resto = await ctx.sb('esteira_cr_criativos?status=eq.aprovado&projeto=is.null&copy=not.is.null&select=id&limit=1');
       if (resto.length) { const site = process.env.URL || 'https://esteiramineracao.netlify.app'; await fetch(`${site}/cr-criacao-bg`, { method: 'POST', headers: { 'x-cr-chave': chave, 'content-type': 'application/json' }, body: '{}' }).catch(() => {}); }
     }
