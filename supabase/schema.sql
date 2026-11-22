@@ -424,3 +424,4 @@ alter table esteira_cr_criativos add column if not exists hipotese text;   -- t�
 alter table esteira_cr_criativos add column if not exists muda text;       -- "o que muda" em 1–2 frases (escrito pelo Copy)
 alter table esteira_cr_levas add column if not exists veredito text;       -- veredito do Analista que originou a leva
 alter table esteira_cr_levas add column if not exists hipoteses jsonb default '[]';  -- [{titulo, porque, tipo, pai, variavel, ja_testado}]
+alter table esteira_cr_ofertas add column if not exists meta_semanal integer;  -- criativos novos por semana (padrão: regras.metaSemanal = 60)
