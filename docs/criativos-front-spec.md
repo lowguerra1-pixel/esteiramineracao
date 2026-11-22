@@ -134,6 +134,8 @@ Lista das fichas (`GET /biblioteca`) agrupada por categoria, com título, fonte 
 
 ## 10c. Agentes ao vivo (`#/agentes`, e um resumo fixo no rodapé do menu)
 
+Já existe uma versão independente em `public/criativos/agentes.html` (barra da esteira, quem faz o quê com animação, saídas recentes do Copy com nota, log com fade). Integre-a como tela do Hub (mesmo visual) ou linke no menu — não reescreva do zero.
+
 `GET /agentes` a cada 20 s. Uma linha por agente (Sync Meta · Vendas Lastlink · Veredito · Analista · Diretor de Copy + Revisor · Diretor de Criação · Editor): ponto verde pulsando quando `ativo`, "fazendo agora" (ids dos cards em `fazendo`, com há quantos minutos), tamanho da `fila`, última rodada (`ultima.em` + `ultima.resumo`) e `proxima`. Abaixo, o feed `log` (20 últimas linhas, novas entram por cima com fade). No rodapé do menu esquerdo, em todas as telas: "Copy escrevendo 3 · fila 98 · próximo às 13:25" — é o "estão trabalhando?" de relance.
 
 Em **Aprovar**, acima da lista: barra de lote — filtros por pai (select com os pais dos cards em revisão, mostrando nº de cards e ROAS do pai), variável e nota mínima; botão "Aprovar estes N" → `POST /criativos/aprovar-lote {paiId?, variavel?, minScore, ids?}`. Ao agrupar por pai, a lista mostra o pai como cabeçalho (ROAS 7d, vendas) e os filhos embaixo com a variável como chip — é como se aprova uma árvore inteira em um clique.
