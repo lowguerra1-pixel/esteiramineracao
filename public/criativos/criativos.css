@@ -368,3 +368,53 @@ main#main { animation: entra .22s ease-out; }
   .g4 .big .cap .i { display: none; }
   .secao > .fraco { display: none; }
 }
+
+/* ===== v4: Aprovar com lote e rastreio ===== */
+.lote { display: grid; grid-template-columns: minmax(180px, 1.1fr) minmax(220px, 1.6fr) minmax(150px, 1fr) auto auto; gap: 14px; align-items: end; margin-bottom: 14px; padding: 14px 16px; }
+.lote-t { align-self: center; }
+.lote select { width: 100%; }
+.stepper { display: flex; align-items: center; border: 1px solid var(--line2); border-radius: 8px; overflow: hidden; height: 37px; }
+.stepper button { background: none; border: 0; width: 34px; height: 100%; cursor: pointer; font-size: 16px; color: var(--fraco); }
+.stepper button:hover { background: var(--card2); color: var(--tx); }
+.stepper b { flex: 1; text-align: center; font: 700 15px 'Inter', sans-serif; }
+.big-ok { padding: 10px 18px; font-size: 14px; height: 40px; }
+.lote-ids { display: flex; flex-wrap: wrap; gap: 4px; max-height: 160px; overflow: auto; }
+.grp { border-bottom: 1px solid var(--line); padding-bottom: 4px; margin-bottom: 4px; }
+.grp:last-child { border-bottom: 0; }
+.grp-h { display: grid; grid-template-columns: 14px 1fr auto; gap: 8px; align-items: center; width: 100%; text-align: left; background: none; border: 0; padding: 10px 8px; cursor: pointer; border-radius: 8px; }
+.grp-h:hover { background: var(--card2); }
+.grp-t b { font-size: 13px; display: block; word-break: break-all; }
+.grp-t small { display: block; color: var(--fraco); font-size: 11.5px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.grp-n { font: 700 12px 'Inter', sans-serif; background: var(--line); border-radius: 6px; padding: 2px 7px; color: var(--fraco); }
+.seta2 { color: var(--fraco); transition: transform .15s; display: inline-block; }
+.seta2.on { transform: rotate(90deg); }
+.grp .item { padding-left: 30px; }
+.item .hk1 { font-size: 11.5px; color: var(--fraco); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 100%; }
+.chip.v-hook_visual { background: #B48CFF26; color: #C9AEFF; }
+.chip.v-hook_falado { background: #5B8CFF26; color: #8FB0FF; }
+.chip.v-body { background: #2EC4E526; color: #6FD8F0; }
+.chip.v-formato { background: #FFB54726; color: #FFC977; }
+.chip.v-angulo { background: #FF7AB626; color: #FF9CC8; }
+.chip.v-avatar { background: #2EE59D22; color: var(--verde); }
+.chip.v-mecanismo { background: #FF8A4C26; color: #FFA677; }
+.chip.v-oferta { background: #FFD23F22; color: var(--amar); }
+.chip.v-execucao { background: var(--line2); color: var(--tx); }
+.rastreio { background: linear-gradient(180deg, #5B8CFF14, transparent); border: 1px solid #5B8CFF33; border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
+.rastreio .r1 { font-size: 14px; line-height: 1.7; }
+.rastreio .r1 a { color: var(--tx); text-decoration: underline; text-decoration-color: var(--line2); text-underline-offset: 3px; }
+.rastreio .sep { color: var(--line2); margin: 0 8px; }
+.rastreio .hip { color: var(--tx); font-style: italic; }
+.rastreio .r2 { margin-top: 6px; font-size: 13px; color: var(--fraco); line-height: 1.5; }
+.rastreio .r3 { display: inline-block; margin-top: 8px; font-size: 12.5px; }
+.base { background: var(--bg); border-radius: 9px; padding: 10px 12px; font-size: 13px; color: var(--fraco); line-height: 1.5; margin-top: 4px; }
+.chip.ficha { background: var(--bg); border: 1px solid var(--line2); color: var(--tx); font-weight: 500; }
+.chip.ficha:hover { border-color: var(--azul); color: var(--azul); }
+.modal .box.larga { width: min(820px, 100%); }
+.md { font-size: 14px; line-height: 1.6; max-height: 65vh; overflow: auto; padding-right: 6px; }
+.md h3, .md h4, .md h5 { margin: 16px 0 6px; } .md h3 { font-size: 17px; } .md h4 { font-size: 15px; }
+.md p { margin: 0 0 10px; } .md ul { margin: 0 0 10px; padding-left: 20px; }
+.md blockquote { margin: 0 0 10px; padding: 6px 12px; border-left: 3px solid var(--line2); color: var(--fraco); }
+.md code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+.md hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+@media (max-width: 1100px) { .lote { grid-template-columns: 1fr 1fr; } .lote-t { grid-column: 1 / -1; } }
+@media (max-width: 760px) { .lote { grid-template-columns: 1fr; } }

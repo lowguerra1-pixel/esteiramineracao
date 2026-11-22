@@ -377,8 +377,93 @@ function graficoLinhas(pts) {
   </svg>`;
 }
 
-// ---------------------------------------------------------------- 4. Aprovar
-const emRevisao = () => S.d.criativos.filter((c) => c.status === 'revisao').sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || String(a.statusEm).localeCompare(String(b.statusEm)));
+// ---------------------------------------------------------------- 4. Aprovar (lote + rastreio)
+const VARIAVEIS = { hook_visual: 'Hook visual', hook_falado: 'Hook falado', body: 'Body', formato: 'Formato', angulo: 'Ângulo', avatar: 'Avatar', mecanismo: 'Mecanismo', oferta: 'Oferta', execucao: 'Execução' };
+const chipVar = (v) => (v ? `<span class="chip v-${esc(v)}">${esc(VARIAVEIS[v] || v)}</span>` : '');
+S.lote = { pai: '', variavel: '', min: 6 };
+// Cards em revisão que batem os filtros da barra de lote, agrupados por pai (pai com melhor ROAS 7d primeiro).
+function filaAprovar() {
+  const L = S.lote;
+  const cs = S.d.criativos.filter((c) => c.status === 'revisao' && (!L.pai || (c.paiId || '') === L.pai) && (!L.variavel || c.variavel === L.variavel) && (c.score ?? 0) >= L.min);
+  const grupos = new Map();
+  for (const c of cs) { const k = c.paiId || ''; if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(c); }
+  const lista = [...grupos.entries()].map(([pai, filhos]) => ({ pai, p: pai ? criativo(pai) : null, filhos: filhos.sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || String(a.variavel).localeCompare(String(b.variavel))) }))
+    .sort((a, b) => (b.p?.d7?.roas ?? -1) - (a.p?.d7?.roas ?? -1) || b.filhos.length - a.filhos.length);
+  return { grupos: lista, plano: lista.flatMap((g) => g.filhos) };
+}
+const emRevisao = () => filaAprovar().plano;
+function pageAprovar() {
+  const todos = S.d.criativos.filter((c) => c.status === 'revisao');
+  const L = S.lote;
+  const pais = [...new Set(todos.map((c) => c.paiId || ''))].map((id) => ({ id, p: id ? criativo(id) : null, n: todos.filter((c) => (c.paiId || '') === id).length })).sort((a, b) => b.n - a.n);
+  const vars = [...new Set(todos.map((c) => c.variavel).filter(Boolean))];
+  const { grupos, plano } = filaAprovar();
+  const variar = S.d.criativos.filter((c) => c.status === 'meio');
+  if (!plano.find((c) => c.id === S.aprovSel)) S.aprovSel = plano[0]?.id || null;
+  const fechados = S.aprovFechados || (S.aprovFechados = new Set());
+  $('#main').innerHTML = `
+  <div class="card lote">
+    <div class="lote-t"><div class="cap">Aprovar em lote</div><div class="fraco" style="font-size:12.5px">Filtre por pai, variável e nota. A lista abaixo mostra exatamente o que o botão aprova.</div></div>
+    <label class="f"><span>Pai</span><select id="lt_pai"><option value="">Todos os pais · ${todos.length} cards</option>${pais.map((x) => `<option value="${esc(x.id)}" ${x.id === L.pai ? 'selected' : ''}>${esc(x.id || 'Sem pai')} · ${x.n} cards${x.p ? ` · ROAS 7d ${fmtRoas(x.p.d7.roas)} · ${fmtI(x.p.d7.vendas)} vendas` : ''}</option>`).join('')}</select></label>
+    <label class="f"><span>Variável</span><select id="lt_var"><option value="">Todas</option>${vars.map((v) => `<option value="${esc(v)}" ${v === L.variavel ? 'selected' : ''}>${esc(VARIAVEIS[v] || v)} · ${todos.filter((c) => c.variavel === v && (!L.pai || (c.paiId || '') === L.pai)).length}</option>`).join('')}</select></label>
+    <label class="f" style="width:110px"><span>Nota mínima</span><div class="stepper"><button data-st="-1">−</button><b id="lt_min">${L.min}</b><button data-st="1">+</button></div></label>
+    <button class="btn ok big-ok" id="lt_ok" ${plano.length && admin() ? '' : 'disabled'} ${admin() ? '' : 'title="Só o gestor aprova"'}>Aprovar ${plano.length === 1 ? 'este' : 'estes'} ${plano.length}</button>
+  </div>
+  <div class="aprovar">
+    <div>
+      <div class="card lista">${grupos.map((g) => {
+        const aberto = !fechados.has(g.pai);
+        return `<div class="grp">
+          <button class="grp-h" data-grp="${esc(g.pai)}"><span class="seta2 ${aberto ? 'on' : ''}">▸</span>
+            <span class="grp-t"><b>${esc(g.pai || 'Sem pai (do zero)')}</b>${g.p ? `<small>ROAS 7d <b class="${roasCls(g.p.d7.roas)}">${fmtRoas(g.p.d7.roas)}</b> · ${fmtI(g.p.d7.vendas)} vendas${g.p.hook ? ` · “${esc(g.p.hook.slice(0, 60))}${g.p.hook.length > 60 ? '…' : ''}”` : ''}</small>` : ''}</span>
+            <span class="grp-n">${g.filhos.length}</span></button>
+          ${aberto ? g.filhos.map((c) => `<button class="item ${c.id === S.aprovSel ? 'on' : ''}" data-sel="${esc(c.id)}">
+            <div class="id"><span>${esc(c.id)}</span>${ok(c.score) ? `<span class="nota ${notaCls(c.score)}">${fmtN(c.score, c.score % 1 ? 1 : 0)}</span>` : ''}</div>
+            <div class="m">${chipVar(c.variavel)}${c.formato ? `<span class="chip f">${esc(c.formato)}</span>` : ''}${c.hook ? `<span class="hk1">${esc(c.hook)}</span>` : ''}</div></button>`).join('') : ''}
+        </div>`;
+      }).join('') || `<div class="vazio" style="padding:30px 10px"><b>${todos.length ? 'Nenhum card com esses filtros.' : 'Nada pra aprovar.'}</b>${todos.length ? 'Baixe a nota mínima ou limpe os filtros.' : 'O Diretor de Copy roda a cada hora; a próxima leva nasce às 06:10.'}</div>`}</div>
+      <details class="dobra card"><summary>Pede variação <span class="badge amar" style="display:inline-grid;margin-left:6px">${variar.length}</span></summary>
+        ${variar.map((c) => `<div class="item" style="cursor:default"><div class="id"><a href="#" data-ficha="${esc(c.id)}" style="color:inherit">${esc(c.id)}</a><span class="${roasCls(c.d7.roas)} num" style="font-size:12px">ROAS 7d ${fmtRoas(c.d7.roas)}</span></div>
+          <div class="row" style="margin-top:8px"><button class="btn sm" data-variar="${esc(c.id)}">Criar variação</button><button class="btn ghost sm" data-matar="${esc(c.id)}">Matar</button></div></div>`).join('') || '<div class="fraco" style="padding:6px">Nenhum criativo pedindo variação.</div>'}
+      </details>
+    </div>
+    <div class="card det" id="det">${plano.length ? '' : '<div class="vazio"><b>Fila limpa ✓</b>Quando o Revisor terminar uma rodada, os cards aparecem aqui.</div>'}</div>
+  </div>`;
+  const re = () => pageAprovar();
+  $('#lt_pai').onchange = (e) => { L.pai = e.target.value; L.variavel = ''; re(); };
+  $('#lt_var').onchange = (e) => { L.variavel = e.target.value; re(); };
+  $$('[data-st]', $('.stepper')).forEach((b) => b.onclick = () => { L.min = Math.max(0, Math.min(10, L.min + Number(b.dataset.st))); re(); });
+  $('#lt_ok').onclick = aprovarLote;
+  $$('[data-grp]').forEach((b) => b.onclick = () => { const k = b.dataset.grp; fechados.has(k) ? fechados.delete(k) : fechados.add(k); re(); });
+  $$('[data-sel]').forEach((b) => b.onclick = () => { S.aprovSel = b.dataset.sel; $$('[data-sel]').forEach((x) => x.classList.toggle('on', x === b)); detalheAprovar(); });
+  $$('[data-variar]').forEach((b) => b.onclick = () => { const c = criativo(b.dataset.variar); const leva = S.d.levas.filter((l) => l.ofertaId === c.ofertaId && l.status === 'planejada').sort((a, b2) => String(a.planejada).localeCompare(String(b2.planejada)))[0]; novoCriativo({ ofertaId: c.ofertaId, tipo: 'variacao', paiId: c.id, levaId: leva?.id || '', formato: c.formato, angulo: c.angulo }); });
+  $$('[data-matar]').forEach((b) => b.onclick = () => mover(b.dataset.matar, 'morto'));
+  if (S.aprovSel) detalheAprovar();
+}
+async function aprovarLote() {
+  const L = S.lote, { plano } = filaAprovar(); if (!plano.length) return;
+  const desc = [L.pai ? `filhos de <b>${esc(L.pai)}</b>` : 'de todos os pais', L.variavel ? `que testam <b>${esc(VARIAVEIS[L.variavel] || L.variavel)}</b>` : '', `com nota ≥ ${L.min}`].filter(Boolean).join(', ');
+  const m = modal(`<h2>Aprovar ${plano.length} ${plano.length === 1 ? 'card' : 'cards'}?</h2>
+    <p style="margin:0 0 12px">Cards ${desc}. Eles saem da revisão e o Diretor de Criação começa a montar os projetos de edição (1–2 min cada).</p>
+    <div class="lote-ids">${plano.slice(0, 40).map((c) => `<span class="chip">${esc(c.id)}</span>`).join('')}${plano.length > 40 ? `<span class="fraco">+${plano.length - 40}</span>` : ''}</div>
+    <div class="row" style="margin-top:16px"><span class="grow"></span><button class="btn ghost" data-fecha>Cancelar</button><button class="btn ok" id="lt_conf">Aprovar ${plano.length}</button></div>`);
+  $('#lt_conf', m).onclick = async () => {
+    $('#lt_conf').disabled = true; $('#lt_conf').textContent = 'Aprovando…';
+    const body = { minScore: L.min, ...(L.pai ? { paiId: L.pai } : {}), ...(L.variavel ? { variavel: L.variavel } : {}), ids: plano.map((c) => c.id) };
+    const r = await acao(() => api('/api/cr/criativos/aprovar-lote', { method: 'POST', body }));
+    fecharModal();
+    if (r) { toast(`${r.aprovados} aprovados ✓ — o Diretor de Criação já começou.`); await recarregar(); route(); }
+  };
+}
+function linhaRastreio(c) {
+  const p = c.paiId ? criativo(c.paiId) : null;
+  const partes = [];
+  if (c.paiId) partes.push(`modela <a href="#" data-ficha="${esc(c.paiId)}"><b>${esc(c.paiId)}</b></a>${p ? ` <span class="fraco">(ROAS 7d <b class="${roasCls(p.d7.roas)}">${fmtRoas(p.d7.roas)}</b>, ${fmtI(p.d7.vendas)} vendas)</span>` : ''}`);
+  else partes.push('<b>do zero</b> <span class="fraco">(sem pai)</span>');
+  if (c.variavel) partes.push(`testa ${chipVar(c.variavel)}`);
+  if (c.hipotese) partes.push(`hipótese: <span class="hip">${esc(c.hipotese)}</span>`);
+  return `<div class="rastreio"><div class="r1">${partes.join('<span class="sep">·</span>')}</div>${c.muda ? `<div class="r2">${esc(c.muda)}</div>` : ''}${c.levaId ? `<a class="r3" href="#/levas/${enc(c.levaId)}">ver a leva inteira (${esc(c.levaId)}) →</a>` : ''}</div>`;
+}
 function notaRevisor(c) {
   const h = [...(c.historico || [])].reverse().find((x) => x.por === 'revisor' && x.nota);
   if (!h) return ok(c.score) ? { n: c.score } : null;
@@ -388,45 +473,27 @@ function notaRevisor(c) {
   const [motivos, ajustes] = resto.split(/\s*·\s*ajustes:\s*/i);
   return { n: m ? Number(m[1].replace(',', '.')) : c.score, motivos, ajustes, em: h.em };
 }
-function pageAprovar() {
-  const lista = emRevisao();
-  const variar = S.d.criativos.filter((c) => c.status === 'meio');
-  if (!lista.find((c) => c.id === S.aprovSel)) S.aprovSel = lista[0]?.id || null;
-  $('#main').innerHTML = `<div class="aprovar">
-    <div>
-      <div class="card lista">${lista.map((c) => `<button class="item ${c.id === S.aprovSel ? 'on' : ''}" data-sel="${esc(c.id)}">
-        <div class="id"><span>${esc(c.id)}</span>${ok(c.score) ? `<span class="nota ${notaCls(c.score)}">${fmtN(c.score, c.score % 1 ? 1 : 0)}</span>` : ''}</div>
-        <div class="m"><span class="chip">${esc(c.ofertaId)}</span>${chipTipo(c.tipo)}${c.formato ? `<span class="chip f">${esc(c.formato)}</span>` : ''}</div></button>`).join('') || '<div class="vazio" style="padding:30px 10px"><b>Nada pra aprovar.</b>O Diretor de Copy roda a cada hora; a próxima leva nasce às 06:10.</div>'}</div>
-      <details class="dobra card" ${variar.length ? '' : ''}><summary>Pede variação <span class="badge amar" style="display:inline-grid;margin-left:6px">${variar.length}</span></summary>
-        ${variar.map((c) => `<div class="item" style="cursor:default"><div class="id"><a href="#" data-ficha="${esc(c.id)}" style="color:inherit">${esc(c.id)}</a><span class="${roasCls(c.d7.roas)} num" style="font-size:12px">ROAS 7d ${fmtRoas(c.d7.roas)}</span></div>
-          <div class="row" style="margin-top:8px"><button class="btn sm" data-variar="${esc(c.id)}">Criar variação</button><button class="btn ghost sm" data-matar="${esc(c.id)}">Matar</button></div></div>`).join('') || '<div class="fraco" style="padding:6px">Nenhum criativo pedindo variação.</div>'}
-      </details>
-    </div>
-    <div class="card det" id="det">${lista.length ? '' : '<div class="vazio"><b>Fila limpa ✓</b>Quando o Revisor terminar uma rodada, os cards aparecem aqui.</div>'}</div>
-  </div>`;
-  $$('[data-sel]').forEach((b) => b.onclick = () => { S.aprovSel = b.dataset.sel; $$('[data-sel]').forEach((x) => x.classList.toggle('on', x === b)); detalheAprovar(); });
-  $$('[data-variar]').forEach((b) => b.onclick = () => { const c = criativo(b.dataset.variar); const leva = S.d.levas.filter((l) => l.ofertaId === c.ofertaId && l.status === 'planejada').sort((a, b2) => String(a.planejada).localeCompare(String(b2.planejada)))[0]; novoCriativo({ ofertaId: c.ofertaId, tipo: 'variacao', paiId: c.id, levaId: leva?.id || '', formato: c.formato, angulo: c.angulo }); });
-  $$('[data-matar]').forEach((b) => b.onclick = () => mover(b.dataset.matar, 'morto'));
-  if (S.aprovSel) detalheAprovar();
-}
 function detalheAprovar() {
   const c = criativo(S.aprovSel); const el = $('#det'); if (!c || !el) return;
-  const pai = c.paiId ? criativo(c.paiId) : null;
   const rv = notaRevisor(c);
   const bloco = (t, v, cls = '') => `<div class="bloco"><div class="cap">${t}</div><div class="txt ${cls}">${v ? esc(v) : '<span class="fraco">—</span>'}</div></div>`;
   el.innerHTML = `
+    ${linhaRastreio(c)}
     <div class="cab"><input class="ided" id="ap_id" value="${esc(c.id)}" title="Nome do anúncio no Meta — edite e tecle Enter para renomear"></div>
-    <div class="meta"><span class="chip">${esc(oferta(c.ofertaId)?.nome || c.ofertaId)}</span>${chipTipo(c.tipo)}${c.formato ? `<span class="chip f">${esc(c.formato)}</span>` : ''}${c.levaId ? `<span class="chip">${esc(c.levaId)}</span>` : ''}<a href="#" data-ficha="${esc(c.id)}" style="margin-left:auto;font-size:12.5px">Abrir ficha completa</a></div>
-    ${c.paiId ? `<div class="pai"><span class="cap">Criativo-pai</span><a href="#" data-ficha="${esc(c.paiId)}"><b>${esc(c.paiId)}</b></a>${pai ? `<span>ROAS total <b class="${roasCls(pai.total.roas)}">${fmtRoas(pai.total.roas)}</b></span><span><b>${fmtI(pai.total.vendas)}</b> vendas</span>${chipSt(pai.status)}` : '<span class="fraco">não encontrado na base</span>'}</div>` : ''}
+    <div class="meta"><span class="chip">${esc(oferta(c.ofertaId)?.nome || c.ofertaId)}</span>${chipTipo(c.tipo)}${c.formato ? `<span class="chip f">${esc(c.formato)}</span>` : ''}<a href="#" data-ficha="${esc(c.id)}" style="margin-left:auto;font-size:12.5px">Ficha completa</a></div>
     ${rv ? `<div class="revisor"><div class="n ${rv.n >= 8 ? 'verde' : rv.n >= 6 ? 'amar' : 'verm'}">${fmtN(rv.n, rv.n % 1 ? 1 : 0)}<small>/10</small></div><div><div class="cap">Nota do Revisor</div>${rv.motivos ? `<div style="margin-top:4px">${esc(rv.motivos)}</div>` : ''}${rv.ajustes ? `<div class="fraco" style="margin-top:6px;font-size:13px"><b style="color:var(--amar)">Ajustes:</b> ${esc(rv.ajustes)}</div>` : ''}</div></div>` : ''}
+    ${bloco('Hook', c.hook, 'hook')}
     <div class="f2">${bloco('Ângulo', c.angulo)}${bloco('Mecanismo', c.mecanismo)}</div>
-    ${bloco('Hook', c.hook, 'hook')}${bloco('Body (estrutura)', c.body)}${bloco('Copy completa', c.copy, 'copy')}
+    ${bloco('Body (estrutura)', c.body)}${bloco('Copy completa', c.copy, 'copy')}
+    ${c.basePesquisa || (c.fichas || []).length ? `<div class="bloco"><div class="cap">Base na pesquisa</div>${c.basePesquisa ? `<div class="base">${esc(c.basePesquisa)}</div>` : ''}${(c.fichas || []).length ? `<div class="row" style="margin-top:8px"><span class="fraco" style="font-size:12px">Fichas lidas:</span>${c.fichas.map((f) => `<button class="chip ficha" data-lerficha="${esc(f)}">${esc(f)}</button>`).join('')}</div>` : ''}</div>` : ''}
     <div class="f2"><label class="f"><span>Arquivo (Drive)</span><input type="url" id="ap_arq" value="${esc(c.arquivoUrl || '')}" placeholder="https://drive.google.com/…"></label>
       <label class="f"><span>Nota <em>(vai no histórico)</em></span><input type="text" id="ap_nota" placeholder="opcional ao aprovar, obrigatória ao devolver"></label></div>
     <div class="rodape">
       <button class="btn ok" id="ap_ok" ${admin() ? '' : 'disabled title="Só o gestor aprova"'}>Aprovar <kbd>A</kbd></button>
       <button class="btn danger" id="ap_dev">Devolver <kbd>D</kbd></button><span class="grow"></span><span class="fraco" style="font-size:12px"><kbd>↑</kbd><kbd>↓</kbd> navegar</span>
     </div>`;
+  el.scrollTop = 0;
+  $$('[data-lerficha]', el).forEach((b) => b.onclick = () => lerFicha(b.dataset.lerficha));
   $('#ap_id').onkeydown = async (e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } if (e.key === 'Escape') { e.target.value = c.id; e.target.blur(); } };
   $('#ap_id').onchange = async (e) => {
     const novo = e.target.value.trim(); if (!novo || novo === c.id) return;
@@ -435,6 +502,32 @@ function detalheAprovar() {
   };
   $('#ap_ok').onclick = () => decidir('aprovado');
   $('#ap_dev').onclick = () => decidir('briefing');
+}
+// Leitura de uma ficha da biblioteca em modal (markdown simples).
+async function lerFicha(id) {
+  const m = modal(`<h2>${esc(id)}</h2><div class="md fraco">carregando…</div><div class="row" style="margin-top:14px"><span class="grow"></span><button class="btn ghost" data-fecha>Fechar</button></div>`);
+  m.querySelector('.box').classList.add('larga');
+  try {
+    const f = await api(`/api/cr/biblioteca/${enc(id)}`);
+    const md = $('.md', m); if (!md) return;
+    $('h2', m).innerHTML = `${esc(f.titulo || id)} ${f.peso === 'essencial' ? '<span class="chip vencedor">essencial</span>' : ''}`;
+    md.className = 'md'; md.innerHTML = `${f.fonte ? `<div class="fraco" style="font-size:12.5px;margin-bottom:10px">${esc(f.fonte)}${f.consulte_quando ? ' · consulte quando: ' + esc(f.consulte_quando) : ''}</div>` : ''}${markdown(f.texto || '')}`;
+  } catch (e) { const md = $('.md', m); if (md) md.textContent = e.message; }
+}
+function markdown(t) {
+  const inl = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*(?!\s)(.+?)\*/g, '$1<i>$2</i>').replace(/`(.+?)`/g, '<code>$1</code>');
+  const out = []; let lista = null;
+  for (const l of String(t).split('\n')) {
+    const h = l.match(/^(#{1,4})\s+(.*)/), li = l.match(/^\s*(?:[-*]|\d+[.)])\s+(.*)/);
+    if (li) { if (!lista) { lista = []; } lista.push(`<li>${inl(li[1])}</li>`); continue; }
+    if (lista) { out.push(`<ul>${lista.join('')}</ul>`); lista = null; }
+    if (h) out.push(`<h${h[1].length + 2}>${inl(h[2])}</h${h[1].length + 2}>`);
+    else if (/^\s*>/.test(l)) out.push(`<blockquote>${inl(l.replace(/^\s*>\s?/, ''))}</blockquote>`);
+    else if (/^\s*(---|\*\*\*)\s*$/.test(l)) out.push('<hr>');
+    else if (l.trim()) out.push(`<p>${inl(l)}</p>`);
+  }
+  if (lista) out.push(`<ul>${lista.join('')}</ul>`);
+  return out.join('');
 }
 async function decidir(para) {
   const c = criativo(S.aprovSel); if (!c) return;
