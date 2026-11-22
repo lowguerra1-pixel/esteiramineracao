@@ -1142,6 +1142,7 @@ async function tickAoVivo(primeira) {
     </div>`).join('') || '<div class="vivo-vazio">—</div>'}${porCol[c.id].length > 40 ? `<div class="vivo-vazio">+${porCol[c.id].length - 40}</div>` : ''}</div></div>`;
   }).join('');
   $('#vv_hora').textContent = 'atualizado ' + new Date().toLocaleTimeString('pt-BR') + ' · a cada 8 s';
+  $('#vv_api')?.remove(); if (d.apiErro) $('#main').insertAdjacentHTML('afterbegin', `<div class="faixa verm" id="vv_api"><b>Agentes parados:</b> a API da Anthropic recusou (${esc(d.apiErro.msg)}). Recarregue créditos em console.anthropic.com → Plans &amp; Billing; a fila retoma sozinha.</div>`);
   api('/api/cr/agentes').then(renderEquipe).catch(() => {});
   $('#vv_log').innerHTML = (d.log || []).map((l) => `<div>${fmtDH(l.em)} · <b>${esc(l.tipo)}</b> · ${esc(l.resumo || '')}</div>`).join('');
   if (primeira) return;
