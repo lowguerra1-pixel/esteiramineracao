@@ -390,3 +390,30 @@ alter table esteira_cr_levas add column if not exists codigo text;              
 alter table esteira_cr_criativos add column if not exists base_pesquisa text;     -- "Base na pesquisa" do card: público, dor/desejo, crença/objeção, expressões usadas
 alter table esteira_cr_criativos add column if not exists fichas jsonb default '[]';        -- fichas do repertório consultadas
 alter table esteira_cr_criativos add column if not exists marcacoes jsonb default '{}';     -- marcações visuais do Editor: formato_hook, primeiro_frame, legenda, duracao_s, cortes_por_10s, produto_aparece_em_s, avatar
+
+-- ---------------------------------------------------------------- Diretor de Criação: banco de takes + projeto de edição
+-- Takes = imagens/vídeos gerados por nós (ChatGPT/Grok/Magnific) reaproveitáveis dentro da oferta (espelho do _TAKES.md da CLAUDE-EDITOR).
+create table if not exists esteira_cr_takes (
+  id text primary key,                   -- OFERTA/arquivo (ex.: RADICIG/grok_T02_pendulo.mp4)
+  oferta_id text references esteira_cr_ofertas(id),
+  arquivo text not null,
+  tipo text default 'video',             -- imagem | video | arte | pagina
+  ferramenta text,                       -- Grok | ChatGPT | Magnific | código | PDF
+  descricao text,                        -- o que mostra
+  bom_para text,                         -- hook dor / mecanismo / produto…
+  usado_em jsonb default '[]',           -- ids de criativos / hooks
+  prompt text,                           -- prompt de imagem usado
+  prompt_animacao text,                  -- prompt de animação (Grok, inglês)
+  arquivo_url text,                      -- link (Drive) ou URL gerada (Magnific)
+  tarefa jsonb,                          -- geração em andamento (Magnific): {id, status}
+  rejeitado boolean default false,
+  motivo text,
+  criado_em timestamptz default now(),
+  atualizado_em timestamptz default now()
+);
+alter table esteira_cr_takes enable row level security;
+create index if not exists esteira_cr_takes_oferta on esteira_cr_takes (oferta_id);
+
+alter table esteira_cr_criativos add column if not exists projeto jsonb;          -- saída do Diretor de Criação (demanda, roteiro, hooks, takes)
+alter table esteira_cr_criativos add column if not exists projeto_em timestamptz;
+alter table esteira_cr_criativos add column if not exists entrega jsonb;          -- o que o Editor devolveu (arquivos, hooks entregues, takes usados)
