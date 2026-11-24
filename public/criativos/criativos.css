@@ -513,3 +513,5 @@ table.tl { background: var(--card); border: 1px solid var(--line); border-radius
 @media (max-width: 1300px) { .vivo-wrap { grid-template-columns: 1fr; } .equipe { position: static; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 14px; } .eq-titulo { grid-column: 1 / -1; } }
 
 .faixa.verm { background: #3a1518; border: 1px solid var(--verm); color: #ffd3d3; margin-bottom: 12px; }
+
+.vc-foot .ok { color: var(--verde, #2EE59D); font-weight: 600; }

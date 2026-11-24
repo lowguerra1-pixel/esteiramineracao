@@ -1138,7 +1138,7 @@ async function tickAoVivo(primeira) {
       <div class="vc-id">${esc(x.id)}${x.score != null ? `<span class="vc-nota ${x.score >= 8 ? 'g' : x.score >= 6 ? 'y' : 'r'}">${x.score}</span>` : ''}</div>
       <div class="vc-meta">${x.variavel ? `<span class="chip v-${esc(x.variavel)}">${esc(VARIAVEL_NOME[x.variavel] || x.variavel)}</span>` : ''}${x.paiId ? `<span class="muted">← ${esc(x.paiId)}</span>` : ''}</div>
       ${x.hook ? `<div class="vc-hook">${esc(x.hook)}</div>` : x.hipotese ? `<div class="vc-hook muted">${esc(x.hipotese)}</div>` : ''}
-      <div class="vc-foot">${x.status === 'briefing' ? '<span class="typing"><i></i><i></i><i></i></span> escrevendo' : x.status === 'aprovado' ? (x.temProjeto ? 'projeto pronto · esperando o Editor' : '<span class="typing"><i></i><i></i><i></i></span> Criação montando o projeto') : esc(x.nota || '')} <span class="grow"></span>${tempo(x.em)}</div>
+      <div class="vc-foot">${x.status === 'briefing' ? '<span class="typing"><i></i><i></i><i></i></span> escrevendo' : x.status === 'aprovado' ? (x.temProjeto ? 'projeto pronto · esperando o Editor' : '<span class="typing"><i></i><i></i><i></i></span> Criação montando o projeto') : x.status === 'entregue' ? `<span class="ok">✓ ${esc((x.arquivos || []).join(', ') || 'entregue')}</span> · subir no Meta` : esc(x.nota || '')} <span class="grow"></span>${tempo(x.em)}</div>
     </div>`).join('') || '<div class="vivo-vazio">—</div>'}${porCol[c.id].length > 40 ? `<div class="vivo-vazio">+${porCol[c.id].length - 40}</div>` : ''}</div></div>`;
   }).join('');
   $('#vv_hora').textContent = 'atualizado ' + new Date().toLocaleTimeString('pt-BR') + ' · a cada 8 s';
@@ -1174,7 +1174,7 @@ function renderEquipe(d) {
   el.innerHTML = `<div class="eq-titulo">Equipe <small>${d.agentes.filter((a) => a.ativo).length} trabalhando</small></div>` + d.agentes.map((a) => {
     const [cor, svg] = AVATARES[a.id] || AVATARES.analista;
     const faz = Array.isArray(a.fazendo) && a.fazendo.length ? a.fazendo.slice(0, 2).map((f) => typeof f === 'string' ? f : f.id).join(', ') + (a.fazendo.length > 2 ? ` +${a.fazendo.length - 2}` : '') : null;
-    const linha = a.ativo ? (faz ? `em ${faz}` : 'trabalhando…') : a.fila ? `parado · ${a.fila} na fila` : a.ultima?.em ? `última ${hh(a.ultima.em)}` : 'ocioso';
+    const linha = a.ativo ? (faz ? `em ${faz}` : 'trabalhando…') : a.prontos ? `ocioso · ${a.prontos} prontos pra subir` + (a.fila ? ` · ${a.fila} na fila` : '') : a.fila ? `parado · ${a.fila} na fila` : a.ultima?.em ? `última ${hh(a.ultima.em)}` : 'ocioso';
     return `<div class="eq ${a.ativo ? 'on' : ''}"><div class="eq-av" style="--c:${cor}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${svg}</svg><i class="eq-st"></i></div><div class="eq-tx"><b>${esc(a.nome)}</b><span>${esc(linha)}</span><small>${a.ativo ? '<em>ao vivo</em>' : 'próxima ' + esc(hh(a.proxima))}</small></div></div>`;
   }).join('');
 }
