@@ -7,6 +7,8 @@ Copie para CLAUDE-EDITOR/_SISTEMA/engine/pedidos.py.
   python pedidos.py baixar <CODIGO>             → cria PROJETOS/<CODIGO>/ com demanda.md, copy.txt, leva.json, planos/_roteiro.json, takes.md
                                                   e marca o card como "em produção"
   python pedidos.py entregar <CODIGO> <pasta>   → registra a entrega (arquivos da pasta, hooks, takes usados) e as marcações do leva.json
+  python pedidos.py prontos [arquivo.csv]       → cards ENTREGUES pelo Editor esperando subir no Meta (a "fila do Subidor");
+                                                  com arquivo.csv, grava a planilha de subida (nome do anúncio, arquivo, pasta, copy, UTM)
   python pedidos.py takes <SIGLA>               → lista o banco de takes da oferta
   python pedidos.py take-ok <ID> <url>          → grava o link/arquivo de um take gerado
   python pedidos.py take-x <ID> "motivo"        → marca take rejeitado
@@ -49,6 +51,32 @@ def listar():
     for c in api('/api/cr/producao'):
         p = c.get('projeto') or {}
         print(f"{c['id']:40} {c['status']:9} {c.get('formato') or '':4} hooks {len(p.get('hooks', []))} takes novos {len(p.get('takes_novos', []))} {'(sem projeto ainda)' if not p else ''}")
+
+
+def prontos(csv_path=None):
+    import csv
+    linhas = []
+    for c in api('/api/cr/producao'):
+        e = c.get('entrega')
+        if c['status'] != 'producao' or not e:
+            continue
+        nome = c['id'].replace(' - ', '-').replace(' ', '-')
+        arquivos = [a if isinstance(a, str) else (a.get('nome') or a.get('arquivo') or '') for a in e.get('arquivos', [])]
+        of = c.get('oferta') or {}
+        linhas.append({
+            'nome_anuncio': nome, 'arquivo': ' | '.join(arquivos), 'pasta': e.get('pasta') or '',
+            'oferta': c['ofertaId'], 'pai': c.get('paiId') or '', 'variavel': c.get('variavel') or '', 'formato': c.get('formato') or '',
+            'texto_primario': (c.get('copy') or '').split('\n\nHEADLINE:')[0].strip(),
+            'headline': ((c.get('copy') or '').split('HEADLINE:')[1].split('\n')[0].strip() if 'HEADLINE:' in (c.get('copy') or '') else ''),
+            'pv_url': of.get('pvUrl') or '', 'utm_content': nome + '|{{ad.id}}', 'entregue_em': e.get('em') or '', 'nota_editor': (e.get('nota') or '')[:200],
+        })
+    for l in linhas:
+        print(f"{l['nome_anuncio']:32} {l['variavel']:12} {l['formato']:4} {l['arquivo']}")
+    print(f"{len(linhas)} prontos pra subir.")
+    if csv_path and linhas:
+        with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
+            w = csv.DictWriter(f, fieldnames=list(linhas[0].keys())); w.writeheader(); w.writerows(linhas)
+        print(f'Planilha gravada em {csv_path}')
 
 
 def baixar(codigo):
@@ -103,6 +131,7 @@ if __name__ == '__main__':
     if cmd == 'listar': listar()
     elif cmd == 'baixar': baixar(a[1])
     elif cmd == 'entregar': entregar(a[1], a[2])
+    elif cmd == 'prontos': prontos(a[1] if len(a) > 1 else None)
     elif cmd == 'takes': takes(a[1])
     elif cmd == 'take-ok': print(api(f'/api/cr/takes/{a[1]}', 'PATCH', {'arquivoUrl': a[2], 'ferramenta': a[3] if len(a) > 3 else 'ChatGPT+Grok'}))
     elif cmd == 'take-x': print(api(f'/api/cr/takes/{a[1]}', 'PATCH', {'rejeitado': True, 'motivo': a[2]}))
