@@ -1134,7 +1134,8 @@ async function tickAoVivo(primeira) {
   const porCol = Object.fromEntries(d.colunas.map((c) => [c.id, d.cards.filter((x) => x.status === c.id)]));
   $('#vv_cols').innerHTML = d.colunas.map((c) => {
     const cards = porCol[c.id].slice(0, 40);
-    return `<div class="vivo-col" data-col="${c.id}"><div class="vivo-head"><span class="vdot ${c.ativo ? 'on' : ''}"></span><b>${esc(c.nome)}</b><span class="n">${porCol[c.id].length}</span><small>${esc(c.agente)}</small></div><div class="vivo-list">${cards.map((x) => `<div class="vivo-card ${x.status === 'briefing' ? 'escrevendo' : ''}" data-vid="${esc(x.id)}" data-ficha="${esc(x.id)}">
+    const extra = c.id === 'entregue' && porCol[c.id].length ? `<button class="btn ghost vv-csv" id="vv_csv" title="Baixa o CSV com nome do anúncio, arquivo, pasta, copy e UTM de cada card pronto — anexe no chat do Subidor">⬇ Baixar planilha de subida</button>` : '';
+    return `<div class="vivo-col" data-col="${c.id}"><div class="vivo-head"><span class="vdot ${c.ativo ? 'on' : ''}"></span><b>${esc(c.nome)}</b><span class="n">${porCol[c.id].length}</span><small>${esc(c.agente)}</small>${extra}</div><div class="vivo-list">${cards.map((x) => `<div class="vivo-card ${x.status === 'briefing' ? 'escrevendo' : ''}" data-vid="${esc(x.id)}" data-ficha="${esc(x.id)}">
       <div class="vc-id">${esc(x.id)}${x.score != null ? `<span class="vc-nota ${x.score >= 8 ? 'g' : x.score >= 6 ? 'y' : 'r'}">${x.score}</span>` : ''}</div>
       <div class="vc-meta">${x.variavel ? `<span class="chip v-${esc(x.variavel)}">${esc(VARIAVEL_NOME[x.variavel] || x.variavel)}</span>` : ''}${x.paiId ? `<span class="muted">← ${esc(x.paiId)}</span>` : ''}</div>
       ${x.hook ? `<div class="vc-hook">${esc(x.hook)}</div>` : x.hipotese ? `<div class="vc-hook muted">${esc(x.hipotese)}</div>` : ''}
@@ -1142,6 +1143,11 @@ async function tickAoVivo(primeira) {
     </div>`).join('') || '<div class="vivo-vazio">—</div>'}${porCol[c.id].length > 40 ? `<div class="vivo-vazio">+${porCol[c.id].length - 40}</div>` : ''}</div></div>`;
   }).join('');
   $('#vv_hora').textContent = 'atualizado ' + new Date().toLocaleTimeString('pt-BR') + ' · a cada 8 s';
+  $('#vv_csv')?.addEventListener('click', () => acao(async () => {
+    const r = await fetch('/api/cr/prontos.csv', { headers: { authorization: 'Bearer ' + S.token } });
+    if (!r.ok) throw new Error('Não consegui gerar a planilha.');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = `subida-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(a.href);
+  }, 'Planilha de subida baixada — anexe no chat do Subidor.'));
   $('#vv_api')?.remove(); if (d.apiErro) $('#main').insertAdjacentHTML('afterbegin', `<div class="faixa verm" id="vv_api"><b>Agentes parados:</b> a API da Anthropic recusou (${esc(d.apiErro.msg)}). Recarregue créditos em console.anthropic.com → Plans &amp; Billing; a fila retoma sozinha.</div>`);
   api('/api/cr/agentes').then(renderEquipe).catch(() => {});
   $('#vv_log').innerHTML = (d.log || []).map((l) => `<div>${fmtDH(l.em)} · <b>${esc(l.tipo)}</b> · ${esc(l.resumo || '')}</div>`).join('');
