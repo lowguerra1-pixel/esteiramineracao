@@ -145,3 +145,11 @@ Na oficina: `docs/editor/pedidos.py` (copiar para `CLAUDE-EDITOR/_SISTEMA/engine
 - O Revisor pontua (`score` 0–10) e devolve ajustes; nota < 6 gera uma reescrita. Critério 7: se há pesquisa, copy genérica ou com jargão (sem a linguagem literal do público) não passa de 5. O card vai para `revisao` com a nota no histórico e em `/aprendizados` (`autor: revisor`).
 - Você aprova em `revisao → aprovado` (gestor) ou **devolve** para `briefing` com nota. Devolvido = o Copy reescreve na hora usando a sua nota (a versão anterior fica no histórico), até 2 devoluções; na 3ª o card fica em `briefing` esperando você (edite na ficha ou mate). Cards em `briefing` que você mesmo criou/editou (sem devolução) não são tocados.
 - `POST /copy` (gestor) roda agora. A pesquisa da oferta entra por `POST /ofertas/:id/pesquisa`; `notas` fica para observações do gestor (também vão no contexto).
+
+
+## Uso da IA e teto diário (27/11)
+
+- `GET /api/cr/uso` → `{ teto, hoje:{total,chamadas,por}, d7, d30, porDia, precos, estimado:true }`. Custo em US$ estimado pelos tokens de cada chamada (gravados em `esteira_cr_log` tipo `uso`, detalhe `{agente, modelo, ref, entrada, saida, cacheLeitura, cacheEscrita, custo}`).
+- `POST /api/cr/config { tetoDiarioUSD }` (padrão 5; 0 = sem teto) e `{ precos: { sonnet:{in,out,cacheIn,cacheW}, haiku:{…} } }` por milhão de tokens.
+- Ao bater o teto, Copy, Criação e Analista param até o dia seguinte (fuso -03) e `apiErro` vem com `teto:true` — o Ao vivo mostra faixa amarela. Subir o teto limpa o aviso.
+- Front sugerido: em Ajustes, campo "Teto diário de gasto (US$)" + tabela de preços; na aba Agentes, o bloco "Gasto IA hoje" (já existe no Ao vivo › Equipe).

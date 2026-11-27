@@ -1148,8 +1148,10 @@ async function tickAoVivo(primeira) {
     if (!r.ok) throw new Error('Não consegui gerar a planilha.');
     const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = `subida-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(a.href);
   }, 'Planilha de subida baixada — anexe no chat do Subidor.'));
-  $('#vv_api')?.remove(); if (d.apiErro) $('#main').insertAdjacentHTML('afterbegin', `<div class="faixa verm" id="vv_api"><b>Agentes parados:</b> a API da Anthropic recusou (${esc(d.apiErro.msg)}). Recarregue créditos em console.anthropic.com → Plans &amp; Billing; a fila retoma sozinha.</div>`);
-  api('/api/cr/agentes').then(renderEquipe).catch(() => {});
+  $('#vv_api')?.remove(); if (d.apiErro) $('#main').insertAdjacentHTML('afterbegin', d.apiErro.teto
+    ? `<div class="faixa amar" id="vv_api"><b>Agentes parados pelo teto de gasto:</b> ${esc(d.apiErro.msg)}</div>`
+    : `<div class="faixa verm" id="vv_api"><b>Agentes parados:</b> a API da Anthropic recusou (${esc(d.apiErro.msg)}). Recarregue créditos em console.anthropic.com → Plans &amp; Billing; a fila retoma sozinha.</div>`);
+  api('/api/cr/agentes').then(renderEquipe).catch(() => {}).then(() => api('/api/cr/uso').then(renderUso).catch(() => {}));
   $('#vv_log').innerHTML = (d.log || []).map((l) => `<div>${fmtDH(l.em)} · <b>${esc(l.tipo)}</b> · ${esc(l.resumo || '')}</div>`).join('');
   if (primeira) return;
   // FLIP: card que mudou de coluna voa da posição antiga para a nova; card novo entra deslizando.
@@ -1161,6 +1163,15 @@ async function tickAoVivo(primeira) {
     el.style.transition = 'none'; el.style.transform = `translate(${dx}px,${dy}px)`; el.classList.add('voando');
     requestAnimationFrame(() => requestAnimationFrame(() => { el.style.transition = 'transform .9s cubic-bezier(.2,.8,.2,1)'; el.style.transform = ''; setTimeout(() => el.classList.remove('voando'), 1000); }));
   });
+}
+
+// Custo da IA (estimado pelos tokens de cada chamada): hoje × teto, 7 dias, por agente.
+function renderUso(u) {
+  const el = $('#vv_equipe'); if (!el || !u) return;
+  $('#vv_uso')?.remove();
+  const pct = u.teto > 0 ? Math.min(100, Math.round((u.hoje.total / u.teto) * 100)) : 0;
+  const por = Object.entries(u.hoje.por).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${esc(k)} ${v.toFixed(2)}`).join(' · ');
+  el.insertAdjacentHTML('beforeend', `<div class="eq-uso" id="vv_uso" title="Estimativa pelos tokens de cada chamada (entrada, saída, cache). Teto diário em Ajustes."><b>Gasto IA hoje</b> <span class="${pct >= 100 ? 'verm' : pct >= 70 ? 'amar' : 'verde'}">US$ ${u.hoje.total.toFixed(2)}</span> <small>/ teto ${u.teto}</small><div class="eq-barra"><i style="width:${pct}%"></i></div><small>${u.hoje.chamadas} chamadas${por ? ' · ' + por : ''}</small><small>7 dias US$ ${u.d7.total.toFixed(2)} · 30 dias US$ ${u.d30.total.toFixed(2)}</small></div>`);
 }
 
 // Equipe: um avatar por agente, aceso quando está trabalhando.

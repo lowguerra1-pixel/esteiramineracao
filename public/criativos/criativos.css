@@ -516,3 +516,9 @@ table.tl { background: var(--card); border: 1px solid var(--line); border-radius
 
 .vc-foot .ok { color: var(--verde, #2EE59D); font-weight: 600; }
 .vivo-head .vv-csv { grid-column: 1 / -1; margin-top: 6px; padding: 5px 10px; font-size: 12px; width: 100%; }
+
+.eq-uso { margin-top: 12px; padding: 10px 12px; border-top: 1px solid var(--line); font-size: 12px; display: grid; gap: 4px; }
+.eq-uso small { color: var(--fraco); font-size: 11px; }
+.eq-barra { height: 4px; background: var(--line2, #2a2f3a); border-radius: 2px; overflow: hidden; }
+.eq-barra i { display: block; height: 100%; background: var(--verde); }
+.faixa.amar { background: #FFD23F22; border: 1px solid #FFD23F66; color: var(--tx); }

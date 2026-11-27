@@ -3,7 +3,7 @@
 import crypto from 'node:crypto';
 import { contextoInterno } from '../../lib/api.mjs';
 import { importarPesquisa } from '../../lib/biblioteca.mjs';
-import { claude } from '../../lib/criativos.mjs';
+import { claude, ligarMedidor } from '../../lib/criativos.mjs';
 
 export default async (req) => {
   const chave = crypto.createHmac('sha256', process.env.APP_SECRET || '').update('lastlink-criativos').digest('base64url').slice(0, 32);
@@ -15,6 +15,7 @@ export default async (req) => {
     const [o] = await sb(`esteira_cr_ofertas?id=eq.${q(b.ofertaId || '')}&select=*`);
     if (!o) throw new Error(`oferta ${b.ofertaId} não encontrada`);
     const cfg = await getConfig();
+    ligarMedidor(sb, 'pesquisa', cfg.precos);
     const r = await importarPesquisa({ sb, q, env, claude: env('ANTHROPIC_API_KEY') ? claude : null, modelo: cfg.modelo || 'claude-sonnet-5-5' }, o, { driveIds: b.driveIds, texto: b.texto });
     await sb('esteira_cr_log', { method: 'POST', body: { tipo: 'pesquisa', resumo: `${o.id}: pesquisa ${r.ok ? 'importada (' + r.chars + ' caracteres' + (r.resumo ? ', resumida' : ', SEM resumo') + ')' : 'falhou'}`, detalhe: r } });
   } catch (e) { await sb('esteira_cr_log', { method: 'POST', body: { tipo: 'pesquisa', resumo: `${b.ofertaId}: erro: ${e.message}` } }).catch(() => {}); }
