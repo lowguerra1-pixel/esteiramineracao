@@ -313,7 +313,7 @@ create table if not exists esteira_cr_aprendizados (
   oferta_id text,
   leva_id text,
   criativo_id text,
-  tipo text not null check (tipo in ('veredito', 'dissecacao', 'hipotese', 'nota')),
+  tipo text not null check (tipo in ('veredito', 'dissecacao', 'hipotese', 'nota', 'decisao')),
   texto text not null,
   autor text not null default 'sistema',
   criado_em timestamptz not null default now()
