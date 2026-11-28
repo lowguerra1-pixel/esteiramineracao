@@ -153,3 +153,12 @@ Na oficina: `docs/editor/pedidos.py` (copiar para `CLAUDE-EDITOR/_SISTEMA/engine
 - `POST /api/cr/config { tetoDiarioUSD }` (padrão 5; 0 = sem teto) e `{ precos: { sonnet:{in,out,cacheIn,cacheW}, haiku:{…} } }` por milhão de tokens.
 - Ao bater o teto, Copy, Criação e Analista param até o dia seguinte (fuso -03) e `apiErro` vem com `teto:true` — o Ao vivo mostra faixa amarela. Subir o teto limpa o aviso.
 - Front sugerido: em Ajustes, campo "Teto diário de gasto (US$)" + tabela de preços; na aba Agentes, o bloco "Gasto IA hoje" (já existe no Ao vivo › Equipe).
+
+
+## Maestro (28/11)
+
+- **Chaves de API** (gestor): `GET/POST /api/cr/chaves` `{nome, papel}` → devolve `chave` (`ek_…`) uma única vez; `DELETE /api/cr/chaves/:id` revoga. A chave entra como `Authorization: Bearer ek_…` e vira usuário virtual (id = nome).
+- `GET /api/cr/maestro/estado` → painel por oferta, esteira por oferta (fila/escrevendo/revisao/aprovado/semProjeto/editando/prontosParaSubir/noAr/meio/vencedor/fadiga), regras, ofertas, levas abertas, vencedores (total + d7), vereditos recentes, analista recente, decisões, **alertas** (`teto`, `api`, `nao_subiu`, `revisao_parada`, `editor_parado`, `queimando`, `oferta_abaixo`, `sync`), uso de IA, config.
+- **Decisões**: `POST /api/cr/aprendizados {tipo:'decisao', texto, ofertaId?}`. Entram no contexto do Analista e do Copy ("DECISÕES DA GESTÃO", valem acima das regras padrão). `POST /config {regras}` agora faz merge com as regras atuais e registra no log (tipo `regras`).
+- Script: `docs/maestro/maestro.py` (estado, oferta, alertas, briefing, regras set, config set, decidir, fila/revisao/aprovados, aprovar/devolver/matar, arvore, rodar, uso, oferta-set).
+- Front sugerido: Ajustes › "Chaves de API" (criar/revogar) e aba "Decisões" (lista + nova).
