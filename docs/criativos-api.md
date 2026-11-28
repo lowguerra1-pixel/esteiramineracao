@@ -167,3 +167,14 @@ Na oficina: `docs/editor/pedidos.py` (copiar para `CLAUDE-EDITOR/_SISTEMA/engine
 ## Portão de volume antes do nível (28/11)
 
 Regras novas (em `regras`): `variacaoVendas` (padrão = `vencedorVendas`) e `roasVencedor` (padrão = `roasSegue`). Nenhum filho abre — nem árvore de vencedor nem a variação `-V1` do meio — sobre pai com menos de `variacaoVendas` vendas; vencedor exige ROAS ≥ `roasVencedor`. O nível ouro/prata/bronze só é calculado depois do portão. `POST /criativos/:id/arvore` sem quantidades manuais respeita o portão (400 com o motivo); com `{hookVisual, hookFalado, body}` força. Ex.: `maestro.py regras set vencedorVendas=15 roasVencedor=2 variacaoVendas=15`.
+
+
+## Tráfego (28/11)
+
+- **Lucro** no painel (`bootstrap.painel.lucro`): série 14 dias (receita paga no dia − gasto do dia − imposto `regras.impostoPct`%), `ontem`, `media7`, `metaDia` (`regras.metaLucroDia`, padrão R$ 3.000). `porOferta[].lucro7`.
+- `GET /api/cr/trafego/campanhas?dias=7&oferta=X` → conjuntos/campanhas com os nossos anúncios: verba/dia (foto), status, lance, d7/d3/ontem (gasto, receita, lucro, vendas, ROAS, CPA, ARPU, custo IC, CTR, CPM) e mudanças recentes de verba/status.
+- `POST /api/cr/trafego/sync` (gestor) → foto do dia de campanhas/conjuntos em `esteira_cr_campanhas_dia` (roda sozinha de hora em hora).
+- `GET /api/cr/trafego/padroes?oferta=&janela=3&escalaGasto=1000&escalaRoas=2` → escalou × não escalou: medianas, corte (quartil dos escaladores) e % dos não-escaladores que passam o corte; `oQueMaisSepara`.
+- Experimentos: `GET/POST /api/cr/trafego/experimentos`, `PATCH /trafego/experimentos/:id {resultado, acerto}` — cada ação de verba/status com hipótese, foto das métricas na hora (`base`), data de releitura; alerta `experimento` em `/maestro/estado` quando vence.
+- DDL nova em `supabase/schema.sql` (seção Tráfego): `esteira_cr_campanhas_dia`, `esteira_cr_experimentos` — rodar no SQL editor.
+- Front sugerido: aba **Tráfego** (lucro/dia vs meta, conjuntos com semáforo, experimentos abertos) — por enquanto só pela skill.

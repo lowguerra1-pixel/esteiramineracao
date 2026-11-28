@@ -425,3 +425,47 @@ alter table esteira_cr_criativos add column if not exists muda text;       -- "o
 alter table esteira_cr_levas add column if not exists veredito text;       -- veredito do Analista que originou a leva
 alter table esteira_cr_levas add column if not exists hipoteses jsonb default '[]';  -- [{titulo, porque, tipo, pai, variavel, ja_testado}]
 alter table esteira_cr_ofertas add column if not exists meta_semanal integer;  -- criativos novos por semana (padrão: regras.metaSemanal = 60)
+
+-- ---------------------------------------------------------------- Tráfego (28/11): histórico de verba/status e experimentos
+-- Foto diária (e por hora, a última do dia vence) de cada campanha e conjunto: verba, status, estratégia de lance.
+create table if not exists esteira_cr_campanhas_dia (
+  dia date not null,
+  conta_id text not null,
+  campaign_id text not null,
+  adset_id text not null default '', -- '' = linha da campanha (CBO); senão linha do conjunto (ABO)
+  nome text,
+  campaign_name text,
+  status text,                       -- ACTIVE | PAUSED | ...
+  effective_status text,
+  verba_dia numeric,                 -- em BRL (convertido pela moeda da conta)
+  verba_orig numeric,
+  moeda text,
+  verba_total numeric,               -- lifetime budget, se houver
+  lance text,                        -- bid_strategy
+  atualizado_em timestamptz default now(),
+  primary key (dia, campaign_id, adset_id)
+);
+create index if not exists esteira_cr_campanhas_dia_camp on esteira_cr_campanhas_dia (campaign_id, dia);
+
+-- Experimentos de tráfego: cada ação (subir/descer verba, pausar, ativar, novo conjunto) com hipótese e resultado.
+create table if not exists esteira_cr_experimentos (
+  id bigserial primary key,
+  em timestamptz default now(),
+  autor text,
+  oferta_id text,
+  alvo_tipo text,                    -- campanha | conjunto | anuncio
+  alvo_id text,
+  alvo_nome text,
+  acao text,                         -- subir | descer | pausar | ativar | novo | lance | outro
+  de text,
+  para text,
+  hipotese text,
+  esperar text,                      -- o que esperar e em quanto tempo
+  reler_em date,
+  base jsonb,                        -- foto das métricas no momento da ação (7d: gasto, vendas, roas, cpa, arpu, custo_ic, lucro/dia)
+  resultado text,
+  resultado_em timestamptz,
+  acerto boolean,                    -- a hipótese se confirmou?
+  status text default 'aberto'       -- aberto | lido | cancelado
+);
+create index if not exists esteira_cr_experimentos_oferta on esteira_cr_experimentos (oferta_id, em desc);

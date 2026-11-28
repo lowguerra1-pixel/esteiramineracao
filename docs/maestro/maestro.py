@@ -21,6 +21,15 @@ maestro.py — mãos do Maestro no app Criativos (https://esteiramineracao.netli
   python maestro.py enviar-briefing msg.txt      → publica o briefing no Hub (aba Maestro) e manda push pros aparelhos cadastrados
   python maestro.py oferta-set RADICIG pvUrl=https://... notas="..." metaSemanal=60
 
+  TRÁFEGO
+  python maestro.py lucro                        → lucro por dia (14 d), ontem, média 7d, meta (R$ 3.000)
+  python maestro.py campanhas [SIGLA] [--dias 7] → conjuntos/campanhas com verba, status, 7d/3d/ontem: gasto, vendas, lucro, ROAS, CPA, ARPU, custo IC
+  python maestro.py padroes [SIGLA]              → o que os criativos que ESCALARAM tinham nos 3 primeiros dias vs os que não
+  python maestro.py experimento "subir" --alvo ADSET_ID --nome "..." --de 100 --para 130 --hipotese "..." --esperar "..." --oferta SIGLA [--reler 2026-12-02]
+  python maestro.py experimentos [aberto|lido]   → lista
+  python maestro.py ler-experimento ID "resultado" --acerto sim|nao
+  python maestro.py rodar sync-campanhas         → foto de verba/status agora
+
 Acesso: variável ESTEIRA_CHAVE (chave ek_… criada pelo gestor em /api/cr/chaves) ou ~/.esteira-maestro.json {"chave": "ek_..."}.
 Alternativa: ESTEIRA_USUARIO + ESTEIRA_PIN (login normal).
 """
@@ -171,7 +180,7 @@ def arvore(pai, hv=0, hf=0, b=0):
 
 
 def rodar(agente):
-    rota = {'copy': '/api/cr/copy', 'criacao': '/api/cr/criacao', 'analista': '/api/cr/analista', 'veredito': '/api/cr/veredito', 'sync': '/api/cr/sync'}[agente]
+    rota = {'copy': '/api/cr/copy', 'criacao': '/api/cr/criacao', 'analista': '/api/cr/analista', 'veredito': '/api/cr/veredito', 'sync': '/api/cr/sync', 'sync-campanhas': '/api/cr/trafego/sync'}[agente]
     print(api(rota, 'POST', {}))
 
 
@@ -184,6 +193,52 @@ def uso():
 def enviar_briefing(arquivo, titulo=None):
     texto = pathlib.Path(arquivo).read_text(encoding='utf-8').strip() if pathlib.Path(arquivo).exists() else arquivo
     print(api('/api/cr/maestro/briefing', 'POST', {'texto': texto, 'titulo': titulo}))
+
+
+def lucro():
+    L = api('/api/cr/bootstrap')['painel']['lucro']
+    print(f"META R$ {L['metaDia']}/dia · imposto {L['impostoPct']}% · ontem R$ {L['ontem']['lucro']} (receita {L['ontem']['receita']} / gasto {L['ontem']['gasto']}) · média 7d R$ {L['media7']} · dias ≥ meta nos últimos 7: {L['diasAcimaMeta7']}")
+    for x in L['serie']: print(f"  {x['dia']}  receita {x['receita']:>9}  gasto {x['gasto']:>9}  lucro {x['lucro']:>9} {'✓' if x['lucro'] >= L['metaDia'] else ''}")
+
+
+def campanhas(sigla=None, dias=7):
+    c = api(f"/api/cr/trafego/campanhas?dias={dias}" + (f"&oferta={sigla}" if sigla else ''))
+    print(f"foto de verba: {c['fotoDe'] or 'ainda sem foto (roda sync-campanhas)'} · {len(c['linhas'])} conjuntos com gasto em {dias}d")
+    for l in c['linhas']:
+        d7, d3, on = l['d7'], l['d3'], l['ontem']
+        print(f"\n[{l['oferta'] or '?'}] {l['campaign_name']} › {l['adset_name']}  (adset {l['adset_id']}, campanha {l['campaign_id']})")
+        print(f"   status {l['status'] or '?'} · verba/dia {l['verbaDia'] if l['verbaDia'] is not None else '?'} ({l['verbaNivel'] or '?'}) · lance {l['lance'] or '?'} · {len(l['anuncios'])} anúncio(s)")
+        for nome, t in (('7d', d7), ('3d', d3), ('ontem', on)):
+            print(f"   {nome:5} gasto {f(t['gasto'],0):>7} receita {f(t['receita'],0):>7} lucro {f(t['lucro'],0):>7} vendas {t['vendas']:>4} ROAS {f(t['roas'])} CPA {f(t['cpa'])} ARPU {f(t['arpu'])} custoIC {f(t['custoIC'])}" + (f" CTR {f(t.get('ctr'))}% CPM {f(t.get('cpm'))}" if nome == '7d' else ''))
+        if l['mudancas']: print('   mudanças:', ' | '.join(l['mudancas']))
+
+
+def padroes(sigla=None):
+    p = api('/api/cr/trafego/padroes' + (f'?oferta={sigla}' if sigla else ''))
+    print(p['nota']); print(f"amostra: {p['amostra']} criativos")
+    for of, r in p['porOferta'].items():
+        print(f"\n== {of}: {r.get('n')} criativos, {r.get('escalaram')} escalaram" + (f" ({r.get('taxaEscala')}%) · {r.get('criterioEscala')} · janela {r.get('janela')}" if 'comparacao' in r else f" · {r.get('aviso')}"))
+        if 'comparacao' not in r: continue
+        print(f"   {'métrica':10} {'escalou':>9} {'não':>9} {'corte':>9}  % dos não-escaladores que passam o corte")
+        for k in r['oQueMaisSepara']:
+            c = r['comparacao'][k]; print(f"   {k:10} {f(c['escalou']):>9} {f(c['naoEscalou']):>9} {f(c['corte']):>9}  {c['naoEscalouQuePassaOCorte']}%")
+        print('   escaladores:', ', '.join(f"{e['id']} (R$ {e['total']['receita']:.0f}, ROAS {e['total']['roas']})" for e in r['escaladores'][:6]))
+
+
+def experimento(acao, opt):
+    b = {'acao': acao, 'alvoId': opt.get('--alvo'), 'alvoNome': opt.get('--nome'), 'alvoTipo': opt.get('--tipo', 'conjunto'), 'de': opt.get('--de'), 'para': opt.get('--para'), 'hipotese': opt.get('--hipotese'), 'esperar': opt.get('--esperar'), 'ofertaId': opt.get('--oferta'), 'relerEm': opt.get('--reler')}
+    print(api('/api/cr/trafego/experimentos', 'POST', b))
+
+
+def experimentos(status=None):
+    for e in api('/api/cr/trafego/experimentos' + (f'?status={status}' if status else '')):
+        print(f"#{e['id']} {e['em'][:10]} [{e.get('oferta_id') or '-'}] {e['acao']} {e.get('alvo_nome') or e['alvo_id']} {e.get('de') or ''}→{e.get('para') or ''} · reler {e.get('reler_em')} · {e['status']}" + (f" · acerto {e['acerto']}" if e.get('acerto') is not None else ''))
+        if e.get('hipotese'): print('    hipótese:', e['hipotese'][:160])
+        if e.get('resultado'): print('    resultado:', e['resultado'][:160])
+
+
+def ler_experimento(eid, resultado, acerto=None):
+    print(api(f'/api/cr/trafego/experimentos/{eid}', 'PATCH', {'resultado': resultado, 'acerto': None if acerto is None else acerto in ('sim', 'true', '1')}))
 
 
 def oferta_set(sigla, args):
@@ -219,4 +274,10 @@ if __name__ == '__main__':
     elif cmd == 'uso': uso()
     elif cmd == 'oferta-set': oferta_set(pos[0], a[3:])
     elif cmd == 'enviar-briefing': enviar_briefing(pos[0], opt.get('--titulo'))
+    elif cmd == 'lucro': lucro()
+    elif cmd == 'campanhas': campanhas(pos[0] if pos else None, int(opt.get('--dias', 7)))
+    elif cmd == 'padroes': padroes(pos[0] if pos else None)
+    elif cmd == 'experimento': experimento(pos[0], opt)
+    elif cmd == 'experimentos': experimentos(pos[0] if pos else None)
+    elif cmd == 'ler-experimento': ler_experimento(pos[0], pos[1], opt.get('--acerto'))
     else: print(__doc__)
