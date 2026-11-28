@@ -18,6 +18,7 @@ maestro.py — mãos do Maestro no app Criativos (https://esteiramineracao.netli
   python maestro.py arvore PAI --hv 5 --hf 3 --b 2   → abre filhos de um vencedor (quantidades manuais)
   python maestro.py rodar copy|criacao|analista|veredito|sync
   python maestro.py uso                          → gasto de IA hoje / 7d / 30d por agente
+  python maestro.py enviar-briefing msg.txt      → publica o briefing no Hub (aba Maestro) e manda push pros aparelhos cadastrados
   python maestro.py oferta-set RADICIG pvUrl=https://... notas="..." metaSemanal=60
 
 Acesso: variável ESTEIRA_CHAVE (chave ek_… criada pelo gestor em /api/cr/chaves) ou ~/.esteira-maestro.json {"chave": "ek_..."}.
@@ -180,6 +181,11 @@ def uso():
     print('por agente hoje:', u['hoje']['por']); print('por agente 7d:', u['d7']['por']); print('por dia:', u['porDia'])
 
 
+def enviar_briefing(arquivo, titulo=None):
+    texto = pathlib.Path(arquivo).read_text(encoding='utf-8').strip() if pathlib.Path(arquivo).exists() else arquivo
+    print(api('/api/cr/maestro/briefing', 'POST', {'texto': texto, 'titulo': titulo}))
+
+
 def oferta_set(sigla, args):
     patch = {}
     for kv in args:
@@ -212,4 +218,5 @@ if __name__ == '__main__':
     elif cmd == 'rodar': rodar(pos[0])
     elif cmd == 'uso': uso()
     elif cmd == 'oferta-set': oferta_set(pos[0], a[3:])
+    elif cmd == 'enviar-briefing': enviar_briefing(pos[0], opt.get('--titulo'))
     else: print(__doc__)

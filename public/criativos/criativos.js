@@ -110,12 +110,14 @@ const ICONES = {
   etiqueta: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12V4h8l10 10-8 8L3 12Z"/><circle cx="7.5" cy="8.5" r="1.3"/></svg>',
   tabela: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 9.5h18M3 14.5h18M9 9.5V20"/></svg>',
   pulso: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l2.5-6 4 12 2.5-6H21"/></svg>',
+  batuta: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20 18 6"/><path d="M15 3l2 2 2 2 2 2-3 1-3-3-3-3Z"/><circle cx="5" cy="19" r="1.5"/></svg>',
   engrenagem: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>',
 };
-const ROTAS = [['', 'Visão geral', 'grade'], ['aovivo', 'Ao vivo', 'pulso'], ['aprovar', 'Aprovar', 'check'], ['board', 'Board', 'colunas'], ['ofertas', 'Ofertas', 'etiqueta'], ['criativos', 'Criativos', 'tabela']];
-const TITULOS = { '': 'Visão geral', aovivo: 'Ao vivo', aprovar: 'Aprovar', board: 'Board', ofertas: 'Ofertas', criativos: 'Criativos', ajustes: 'Ajustes' };
+const ROTAS = [['', 'Visão geral', 'grade'], ['aovivo', 'Ao vivo', 'pulso'], ['maestro', 'Maestro', 'batuta'], ['aprovar', 'Aprovar', 'check'], ['board', 'Board', 'colunas'], ['ofertas', 'Ofertas', 'etiqueta'], ['criativos', 'Criativos', 'tabela']];
+const TITULOS = { '': 'Visão geral', aovivo: 'Ao vivo', maestro: 'Maestro', aprovar: 'Aprovar', board: 'Board', ofertas: 'Ofertas', criativos: 'Criativos', ajustes: 'Ajustes' };
 
 async function boot() {
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/criativos/sw.js').catch(() => {});
   if (!S.token) return renderLogin();
   $('#app').innerHTML = `<div class="shell"><nav class="menu"></nav><div class="conteudo"><div class="sk" style="height:34px;width:220px;margin-bottom:24px"></div><div class="g4">${'<div class="sk" style="height:150px"></div>'.repeat(4)}</div><div class="sk" style="height:90px"></div></div></div>`;
   try { S.user = (await api('/api/eu')).usuario; await recarregar(); }
@@ -158,6 +160,7 @@ function route() {
   const { r, arg, q } = rota();
   menu(r === 'levas' ? 'ofertas' : r); $('#titulo').textContent = r === 'levas' ? 'Por que esta leva?' : arg && r === 'ofertas' ? (oferta(arg)?.nome || arg) : TITULOS[r] ?? 'Visão geral';
   if (r === 'aovivo') return pageAoVivo();
+  if (r === 'maestro') return pageMaestro();
   if (r === 'aprovar') return pageAprovar();
   if (r === 'board') { if (q.get('oferta')) S.f.ofertasBoard = [q.get('oferta')]; return pageBoard(); }
   if (r === 'ofertas') return arg ? pageOferta(arg) : pageOfertas();
@@ -1194,4 +1197,48 @@ function renderEquipe(d) {
     const linha = a.ativo ? (faz ? `em ${faz}` : 'trabalhando…') : a.prontos ? `ocioso · ${a.prontos} prontos pra subir` + (a.fila ? ` · ${a.fila} na fila` : '') : a.fila ? `parado · ${a.fila} na fila` : a.ultima?.em ? `última ${hh(a.ultima.em)}` : 'ocioso';
     return `<div class="eq ${a.ativo ? 'on' : ''}"><div class="eq-av" style="--c:${cor}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${svg}</svg><i class="eq-st"></i></div><div class="eq-tx"><b>${esc(a.nome)}</b><span>${esc(linha)}</span><small>${a.ativo ? '<em>ao vivo</em>' : 'próxima ' + esc(hh(a.proxima))}</small></div></div>`;
   }).join('');
+}
+
+
+// ---------------------------------------------------------------- Maestro: briefings diários + notificações no aparelho (PWA / Web Push)
+async function pageMaestro() {
+  $('#main').innerHTML = `<div class="card"><header><h2>Notificações neste aparelho</h2></header><div id="mx_push" class="muted">verificando…</div></div>
+    <div class="card" style="margin-top:16px"><header><h2>Briefings do Maestro</h2><span class="grow"></span><span class="muted">chegam todo dia às 07:23</span></header><div id="mx_lista" class="muted">carregando…</div></div>`;
+  renderPushEstado();
+  try {
+    const bs = await api('/api/cr/maestro/briefings');
+    $('#mx_lista').innerHTML = bs.length ? bs.map((b) => `<article class="briefing"><div class="muted">${fmtDH(b.em)}${b.titulo ? ' · ' + esc(b.titulo) : ''}</div><pre>${esc(b.texto)}</pre></article>`).join('') : '<div class="vivo-vazio">Nenhum briefing ainda. O primeiro chega amanhã às 07:23.</div>';
+  } catch (e) { $('#mx_lista').textContent = e.message; }
+}
+async function renderPushEstado() {
+  const el = $('#mx_push'); if (!el) return;
+  const suporte = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  if (!suporte) {
+    el.innerHTML = ios && !standalone
+      ? '<b>No iPhone, primeiro adicione o Hub à Tela de Início</b> (Safari → botão Compartilhar → "Adicionar à Tela de Início"), abra por lá e volte aqui pra ativar.'
+      : 'Este navegador não suporta notificações push.';
+    return;
+  }
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+  const perm = Notification.permission;
+  el.innerHTML = `<div class="linha-push">${sub ? '<span class="verde">● ativas neste aparelho</span>' : perm === 'denied' ? '<span class="verm">bloqueadas pelo navegador — libere nas configurações do site</span>' : '<span class="muted">desligadas</span>'}
+    <span class="grow"></span>
+    ${sub ? '<button class="btn ghost" id="mx_testar">Testar</button> <button class="btn ghost" id="mx_desligar">Desligar</button>' : perm !== 'denied' ? '<button class="btn" id="mx_ligar">Ativar notificações neste aparelho</button>' : ''}</div>
+    ${ios && !standalone ? '<div class="muted" style="margin-top:8px">No iPhone as notificações só chegam se o Hub estiver instalado na Tela de Início.</div>' : ''}`;
+  $('#mx_ligar')?.addEventListener('click', () => acao(async () => {
+    const p = await Notification.requestPermission(); if (p !== 'granted') throw new Error('Permissão negada.');
+    const { publicKey } = await api('/api/cr/push/chave');
+    const s2 = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
+    await api('/api/cr/push/inscrever', { method: 'POST', body: { subscription: s2.toJSON(), aparelho: navigator.userAgent.slice(0, 120) } });
+    renderPushEstado();
+  }, 'Notificações ativadas — você recebe o briefing do Maestro aqui.'));
+  $('#mx_desligar')?.addEventListener('click', () => acao(async () => { await api('/api/cr/push/inscrever', { method: 'DELETE', body: { endpoint: sub.endpoint } }); await sub.unsubscribe(); renderPushEstado(); }, 'Notificações desligadas neste aparelho.'));
+  $('#mx_testar')?.addEventListener('click', () => acao(() => api('/api/cr/push/testar', { method: 'POST', body: {} }), 'Teste enviado — deve aparecer em segundos.'));
+}
+function urlBase64ToUint8Array(b64) {
+  const pad = '='.repeat((4 - (b64.length % 4)) % 4); const base = (b64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base); const out = new Uint8Array(raw.length); for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i); return out;
 }

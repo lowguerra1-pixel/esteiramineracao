@@ -1,7 +1,7 @@
-data/
-node_modules/
-.DS_Store
 *.log
+.DS_Store
 .env
 .netlify/
+data/
+node_modules/
 public/vendor/

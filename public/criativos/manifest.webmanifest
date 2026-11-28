@@ -1,0 +1,22 @@
+{
+ "name": "Criativos · Kaian Digital",
+ "short_name": "Criativos",
+ "start_url": "/criativos/",
+ "scope": "/criativos/",
+ "display": "standalone",
+ "background_color": "#0f151c",
+ "theme_color": "#16202A",
+ "icons": [
+  {
+   "src": "/criativos/icone-192.png",
+   "sizes": "192x192",
+   "type": "image/png"
+  },
+  {
+   "src": "/criativos/icone-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "any maskable"
+  }
+ ]
+}

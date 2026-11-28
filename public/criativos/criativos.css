@@ -522,3 +522,7 @@ table.tl { background: var(--card); border: 1px solid var(--line); border-radius
 .eq-barra { height: 4px; background: var(--line2, #2a2f3a); border-radius: 2px; overflow: hidden; }
 .eq-barra i { display: block; height: 100%; background: var(--verde); }
 .faixa.amar { background: #FFD23F22; border: 1px solid #FFD23F66; color: var(--tx); }
+
+.linha-push { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.briefing { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.briefing pre { white-space: pre-wrap; font: inherit; margin: 6px 0 0; line-height: 1.5; }
