@@ -116,12 +116,14 @@ def alertas():
 
 def briefing():
     e = api('/api/cr/maestro/estado')
+    L = e['painel'].get('lucro')
+    if L: print(f"LUCRO ontem R$ {L['ontem']['lucro']:,.0f} (receita {L['ontem']['receita']:,.0f} / gasto {L['ontem']['gasto']:,.0f}) · meta R$ {L['metaDia']:,.0f}/dia · média 7d R$ {L['media7']:,.0f} · dias na meta (7d): {L['diasAcimaMeta7']}")
     tot = sum((o.get('receita7') or 0) for o in e['painel']['porOferta'])
     ant = sum((o.get('receitaSemanaAnterior') or 0) for o in e['painel']['porOferta'])
     print(f"RECEITA 7d: R$ {tot:,.0f} (semana anterior R$ {ant:,.0f})")
     for o in e['painel']['porOferta']:
         if (o.get('gasto7') or 0) > 0 or (o.get('receita7') or 0) > 0:
-            print(f"- {o['id']}: ROAS {f(o.get('roas7'))}, R$ {f(o.get('receita7'), 0)} receita / R$ {f(o.get('gasto7'), 0)} gasto, {o.get('vencedores', 0)} vencedores, {o.get('rodando', 0)} no ar")
+            print(f"- {o['id']}: lucro 7d R$ {f(o.get('lucro7'), 0)} · ROAS {f(o.get('roas7'))} · R$ {f(o.get('receita7'), 0)} receita / R$ {f(o.get('gasto7'), 0)} gasto · {o.get('vencedores', 0)} vencedores · {o.get('rodando', 0)} no ar")
     es = e['esteira']; tot_es = {k: sum(v[k] for v in es.values()) for k in ('fila', 'revisao', 'aprovado', 'semProjeto', 'editando', 'prontosParaSubir')}
     print(f"ESTEIRA: {tot_es['fila']} na fila, {tot_es['revisao']} em revisão, {tot_es['aprovado']} aprovados ({tot_es['semProjeto']} sem projeto), {tot_es['editando']} editando, {tot_es['prontosParaSubir']} prontos pra subir")
     print(f"IA: US$ {e['uso']['total']} hoje (teto {e['uso']['teto']})")
