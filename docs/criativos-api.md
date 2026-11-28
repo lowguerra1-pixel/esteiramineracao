@@ -162,3 +162,8 @@ Na oficina: `docs/editor/pedidos.py` (copiar para `CLAUDE-EDITOR/_SISTEMA/engine
 - **Decisões**: `POST /api/cr/aprendizados {tipo:'decisao', texto, ofertaId?}`. Entram no contexto do Analista e do Copy ("DECISÕES DA GESTÃO", valem acima das regras padrão). `POST /config {regras}` agora faz merge com as regras atuais e registra no log (tipo `regras`).
 - Script: `docs/maestro/maestro.py` (estado, oferta, alertas, briefing, regras set, config set, decidir, fila/revisao/aprovados, aprovar/devolver/matar, arvore, rodar, uso, oferta-set).
 - Front sugerido: Ajustes › "Chaves de API" (criar/revogar) e aba "Decisões" (lista + nova).
+
+
+## Portão de volume antes do nível (28/11)
+
+Regras novas (em `regras`): `variacaoVendas` (padrão = `vencedorVendas`) e `roasVencedor` (padrão = `roasSegue`). Nenhum filho abre — nem árvore de vencedor nem a variação `-V1` do meio — sobre pai com menos de `variacaoVendas` vendas; vencedor exige ROAS ≥ `roasVencedor`. O nível ouro/prata/bronze só é calculado depois do portão. `POST /criativos/:id/arvore` sem quantidades manuais respeita o portão (400 com o motivo); com `{hookVisual, hookFalado, body}` força. Ex.: `maestro.py regras set vencedorVendas=15 roasVencedor=2 variacaoVendas=15`.
